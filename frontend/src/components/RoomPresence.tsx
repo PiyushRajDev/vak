@@ -5,6 +5,7 @@ import {
     useRef,
     useState,
 } from "react";
+import ConversationFeed, { type ConversationMessage } from "./ConversationFeed";
 
 type RoomSession = {
     roomCode: string;
@@ -22,14 +23,6 @@ type Participant = {
     preferredLanguage: string;
     isMuted: boolean;
     connected: boolean;
-};
-
-type RoomTranscript = {
-    id: string;
-    speakerName: string;
-    text: string;
-    detectedLanguage?: string;
-    latencyMs?: number;
 };
 
 type RoomAudioMetadata = {
@@ -160,9 +153,12 @@ export default function RoomPresence({
     const [audioStatus, setAudioStatus] =
         useState("Microphone off");
 
-    // Room transcripts.
-    const [roomTranscripts, setRoomTranscripts] =
-        useState<RoomTranscript[]>([]);
+    // Room conversation messages (Phase 2)
+    const [messages, setMessages] =
+        useState<ConversationMessage[]>([]);
+
+    const [playingTurnId, setPlayingTurnId] =
+        useState<string | null>(null);
 
     // Audio output.
     const [isAudioEnabled, setIsAudioEnabled] =
@@ -501,7 +497,8 @@ export default function RoomPresence({
 
     const schedulePcmChunk = useCallback((
         pcm: ArrayBuffer,
-        sampleRate: number
+        sampleRate: number,
+        turnId?: string
     ) => {
         const context = playbackContextRef.current;
 
@@ -549,6 +546,18 @@ export default function RoomPresence({
 
         nextPlaybackTimeRef.current =
             startAt + audioBuffer.duration;
+
+        if (turnId) {
+            setPlayingTurnId(turnId);
+            source.onended = () => {
+                const now = playbackContextRef.current?.currentTime ?? 0;
+                if (now >= nextPlaybackTimeRef.current - 0.08) {
+                    setPlayingTurnId(current =>
+                        current === turnId ? null : current
+                    );
+                }
+            };
+        }
     }, []);
 
     // --------------------------------------------------
@@ -579,7 +588,8 @@ export default function RoomPresence({
             try {
                 schedulePcmChunk(
                     chunk.pcm,
-                    chunk.sampleRate
+                    chunk.sampleRate,
+                    turnId
                 );
 
             } catch (err) {
@@ -1021,42 +1031,153 @@ export default function RoomPresence({
                             break;
                         }
 
-                        const entry: RoomTranscript = {
-                            id: String(
-                                transcript.segmentId ??
-                                `${speaker.id ?? "speaker"}-${Date.now()}`
-                            ),
+                        const isSelf = speaker.id === roomSession.participantId;
+                        const msgId = String(
+                            transcript.segmentId ??
+                            `${speaker.id ?? "speaker"}-${Date.now()}`
+                        );
 
-                            speakerName: String(
-                                speaker.displayName ?? "Participant"
-                            ),
+                        setMessages(prev => {
+                            const existingIndex = prev.findIndex(m => m.id === msgId);
+                            if (existingIndex >= 0) {
+                                const updated = [...prev];
+                                updated[existingIndex] = {
+                                    ...updated[existingIndex],
+                                    originalText: transcript.text,
+                                    latencyMs: transcript.latencyMs ?? updated[existingIndex].latencyMs,
+                                };
+                                return updated;
+                            }
 
-                            text: transcript.text,
+                            const newMessage: ConversationMessage = {
+                                id: msgId,
+                                speakerId: speaker.id || "speaker",
+                                speakerName: speaker.displayName || "Participant",
+                                sourceLanguage:
+                                    speaker.spokenLanguage ||
+                                    transcript.detectedLanguage ||
+                                    roomSession.spokenLanguage,
+                                targetLanguage: isSelf
+                                    ? undefined
+                                    : roomSession.preferredLanguage,
+                                isSelf,
+                                originalText: transcript.text,
+                                translatedText: isSelf ? undefined : undefined,
+                                isTranslating: !isSelf,
+                                timestamp: Date.now(),
+                                latencyMs: transcript.latencyMs,
+                            };
 
-                            detectedLanguage:
-                                transcript.detectedLanguage,
-
-                            latencyMs:
-                                typeof transcript.latencyMs === "number"
-                                    ? transcript.latencyMs
-                                    : undefined,
-                        };
-
-                        setRoomTranscripts(previous => [
-                            ...previous,
-                            entry,
-                        ].slice(-30));
+                            return [...prev, newMessage].slice(-50);
+                        });
 
                         break;
                     }
 
                     // --------------------------------------
-                    // Translation started.
+                    // Voice turn started (translation starting).
+                    // --------------------------------------
+
+                    case "voice_turn_started": {
+                        const turnId = message.turnId;
+                        const speakerId = message.speaker?.id;
+                        const originalText = message.originalText;
+
+                        if (turnId) {
+                            setMessages(prev => {
+                                const idx = prev.findLastIndex(
+                                    m =>
+                                        (!m.turnId && m.speakerId === speakerId) ||
+                                        (originalText && m.originalText === originalText)
+                                );
+                                if (idx >= 0) {
+                                    const updated = [...prev];
+                                    updated[idx] = {
+                                        ...updated[idx],
+                                        turnId,
+                                    };
+                                    return updated;
+                                }
+                                return prev;
+                            });
+                        }
+
+                        break;
+                    }
+
+                    // --------------------------------------
+                    // Translation received.
                     // --------------------------------------
 
                     case "translation": {
+                        const turnId = message.turnId;
+                        const speakerId = message.speaker?.id;
+                        const originalText = message.originalText;
+                        const translatedText = message.translatedText;
+
+                        if (typeof translatedText === "string") {
+                            setMessages(prev => {
+                                let idx = -1;
+                                if (turnId) {
+                                    idx = prev.findLastIndex(m => m.turnId === turnId);
+                                }
+                                if (idx === -1 && originalText) {
+                                    idx = prev.findLastIndex(
+                                        m =>
+                                            m.originalText === originalText &&
+                                            (!speakerId || m.speakerId === speakerId)
+                                    );
+                                }
+                                if (idx === -1 && speakerId) {
+                                    idx = prev.findLastIndex(
+                                        m =>
+                                            m.speakerId === speakerId &&
+                                            !m.translatedText
+                                    );
+                                }
+
+                                if (idx >= 0) {
+                                    const updated = [...prev];
+                                    updated[idx] = {
+                                        ...updated[idx],
+                                        turnId: turnId || updated[idx].turnId,
+                                        translatedText,
+                                        isTranslating: false,
+                                        latencyMs:
+                                            typeof message.latencyMs === "number"
+                                                ? message.latencyMs
+                                                : updated[idx].latencyMs,
+                                    };
+                                    return updated;
+                                }
+
+                                const newMsg: ConversationMessage = {
+                                    id: turnId || `turn-${Date.now()}`,
+                                    turnId,
+                                    speakerId: speakerId || "speaker",
+                                    speakerName:
+                                        message.speaker?.displayName ||
+                                        "Participant",
+                                    sourceLanguage: message.sourceLanguage || "",
+                                    targetLanguage:
+                                        message.targetLanguage ||
+                                        roomSession.preferredLanguage,
+                                    isSelf: speakerId === roomSession.participantId,
+                                    originalText: originalText || "",
+                                    translatedText,
+                                    isTranslating: false,
+                                    timestamp: Date.now(),
+                                    latencyMs: message.latencyMs,
+                                };
+                                return [...prev, newMsg].slice(-50);
+                            });
+                        }
+
                         setPlaybackStatus(
-                            `Translating into ${message.targetLanguage ?? roomSession.preferredLanguage}...`
+                            `Translating into ${
+                                message.targetLanguage ??
+                                roomSession.preferredLanguage
+                            }...`
                         );
 
                         break;
@@ -1398,58 +1519,13 @@ export default function RoomPresence({
 
             </div>
 
-            {/* LIVE ROOM TRANSCRIPTS */}
-
-            <div className="room-transcript-feed">
-
-                <div className="transcript-heading">
-                    <h2>Live room transcripts</h2>
-
-                    <span>
-                        {roomTranscripts.length} segments
-                    </span>
-                </div>
-
-                {roomTranscripts.length === 0 ? (
-
-                    <div className="empty">
-                        Recognized speech from room participants
-                        will appear here.
-                    </div>
-
-                ) : (
-
-                    roomTranscripts.map(item => (
-                        <article
-                            className="transcript"
-                            key={item.id}
-                        >
-
-                            <strong>
-                                {item.speakerName}
-                            </strong>
-
-                            <p>
-                                {item.text}
-                            </p>
-
-                            <div className="metadata">
-
-                                {item.detectedLanguage ??
-                                    "Language unknown"}
-
-                                {typeof item.latencyMs === "number"
-                                    ? ` · ${item.latencyMs} ms`
-                                    : ""}
-
-                            </div>
-
-                        </article>
-                    ))
-
-                )}
-
-            </div>
+            {/* LIVE CONVERSATION TRANSCRIPT (HERO) */}
+            <ConversationFeed
+                messages={messages}
+                playingTurnId={playingTurnId}
+                participants={participants}
+                selfParticipantId={roomSession.participantId}
+            />
 
         </section>
     );
