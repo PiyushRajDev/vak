@@ -7,6 +7,7 @@ import {
 } from "react";
 import ConversationFeed, { type ConversationMessage } from "./ConversationFeed";
 import ParticipantTiles from "./ParticipantTiles";
+import RoomHeader, { type ConnectionState } from "./RoomHeader";
 import StatusLine from "./StatusLine";
 import { getLanguage } from "../languages";
 
@@ -59,6 +60,7 @@ type Props = {
     roomSession: RoomSession;
     playbackContext?: AudioContext | null;
     initialMicStream?: MediaStream | null;
+    onLeaveRoom?: () => void;
 };
 
 type PendingSttStart = {
@@ -134,6 +136,7 @@ export default function RoomPresence({
     roomSession,
     playbackContext: initialPlaybackContext,
     initialMicStream,
+    onLeaveRoom,
 }: Props) {
 
     // --------------------------------------------------
@@ -143,8 +146,34 @@ export default function RoomPresence({
     const [participants, setParticipants] =
         useState<Participant[]>([]);
 
-    const [connectionStatus, setConnectionStatus] =
-        useState("Connecting...");
+    const [connectionState, setConnectionState] =
+        useState<ConnectionState>("connecting");
+    const reconnectAttemptsRef = useRef(0);
+    const reconnectTimerRef = useRef<number | null>(null);
+    const connectFnRef = useRef<(() => void) | null>(null);
+
+    const [copied, setCopied] = useState(false);
+    const handleCopyRoomCode = useCallback(async () => {
+        try {
+            await navigator.clipboard.writeText(roomSession.roomCode);
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 2000);
+        } catch {
+            console.error("Failed to copy room code");
+        }
+    }, [roomSession.roomCode]);
+
+    const handleManualReconnect = useCallback(() => {
+        if (reconnectTimerRef.current !== null) {
+            window.clearTimeout(reconnectTimerRef.current);
+            reconnectTimerRef.current = null;
+        }
+        reconnectAttemptsRef.current = 0;
+        setConnectionState("connecting");
+        if (connectFnRef.current) {
+            connectFnRef.current();
+        }
+    }, []);
 
     const [error, setError] = useState("");
 
@@ -838,7 +867,7 @@ export default function RoomPresence({
             ws.onopen = () => {
                 if (disposed) return;
 
-                setConnectionStatus("Authenticating...");
+                setConnectionState("connecting");
 
                 // Authentication must be the first message.
                 ws?.send(JSON.stringify({
@@ -884,7 +913,8 @@ export default function RoomPresence({
                     // --------------------------------------
 
                     case "room_joined": {
-                        setConnectionStatus("Connected");
+                        setConnectionState("connected");
+                        reconnectAttemptsRef.current = 0;
                         void refreshRoster();
                         if (!isMutedRef.current) {
                             void startAudioSession();
@@ -1168,7 +1198,7 @@ export default function RoomPresence({
                             messageText.toLowerCase().includes("token")
                         ) {
                             setError("Session expired. Please rejoin.");
-                            setConnectionStatus("Connection error");
+                            setConnectionState("error");
                         } else {
                             setError("Connection error. Reconnecting…");
                         }
@@ -1187,16 +1217,14 @@ export default function RoomPresence({
 
             ws.onerror = () => {
                 if (!disposed) {
-                    setError(
-                        "Could not connect to the room WebSocket."
-                    );
-
-                    setConnectionStatus("Connection error");
+                    if (reconnectAttemptsRef.current >= 5) {
+                        setConnectionState("error");
+                    }
                 }
             };
 
             // ----------------------------------------------
-            // Socket closed.
+            // Socket closed (Auto Reconnect with Backoff).
             // ----------------------------------------------
 
             ws.onclose = () => {
@@ -1211,22 +1239,32 @@ export default function RoomPresence({
                 void stopMicrophone();
 
                 if (!disposed) {
-                    setConnectionStatus("Disconnected");
+                    if (reconnectAttemptsRef.current < 5) {
+                        reconnectAttemptsRef.current += 1;
+                        setConnectionState("reconnecting");
+                        const delay = Math.min(
+                            1000 * Math.pow(1.5, reconnectAttemptsRef.current - 1),
+                            6000
+                        );
+                        reconnectTimerRef.current = window.setTimeout(() => {
+                            if (!disposed && connectFnRef.current) {
+                                connectFnRef.current();
+                            }
+                        }, delay);
+                    } else {
+                        setConnectionState("error");
+                    }
                 }
             };
         };
 
+        connectFnRef.current = connect;
+
         try {
             connect();
 
-        } catch (err) {
-            setConnectionStatus("Connection error");
-
-            setError(
-                err instanceof Error
-                    ? err.message
-                    : "WebSocket failed."
-            );
+        } catch {
+            setConnectionState("error");
         }
 
         // --------------------------------------------------
@@ -1235,6 +1273,12 @@ export default function RoomPresence({
 
         return () => {
             disposed = true;
+
+            if (reconnectTimerRef.current !== null) {
+                window.clearTimeout(reconnectTimerRef.current);
+                reconnectTimerRef.current = null;
+            }
+            connectFnRef.current = null;
 
             audioReadyRef.current = false;
 
@@ -1310,6 +1354,19 @@ export default function RoomPresence({
     return (
         <section className="room-presence">
 
+            {/* ROOM HEADER (PHASE 5) */}
+            <RoomHeader
+                roomCode={roomSession.roomCode}
+                spokenLanguage={roomSession.spokenLanguage}
+                preferredLanguage={roomSession.preferredLanguage}
+                participantCount={connectedCount}
+                connectionState={connectionState}
+                copied={copied}
+                onCopyRoomCode={handleCopyRoomCode}
+                onLeaveRoom={onLeaveRoom || (() => {})}
+                onReconnect={handleManualReconnect}
+            />
+
             {/* STATUS LINE (PHASE 3) */}
             <StatusLine
                 connectedCount={connectedCount}
@@ -1363,7 +1420,7 @@ export default function RoomPresence({
                             isMuted ? "btn-meet-muted" : "btn-meet-active"
                         }`}
                         onClick={() => void toggleMute()}
-                        disabled={connectionStatus !== "Connected" || isStarting}
+                        disabled={connectionState !== "connected" || isStarting}
                         aria-label={
                             isMuted ? "Unmute microphone" : "Mute microphone"
                         }

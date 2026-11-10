@@ -636,20 +636,6 @@ function App() {
     const [micStream, setMicStream] = useState<MediaStream | null>(null);
 
     const [showDiagnostics, setShowDiagnostics] = useState(false);
-    const [copied, setCopied] = useState(false);
-    const [roomError, setRoomError] = useState("");
-
-    const copyRoomCode = async () => {
-        if (!roomSession) return;
-
-        try {
-            await navigator.clipboard.writeText(roomSession.roomCode);
-            setCopied(true);
-            setRoomError("");
-        } catch {
-            setRoomError("Could not copy room code.");
-        }
-    };
 
     const leaveRoom = async () => {
         if (!roomSession) return;
@@ -678,17 +664,12 @@ function App() {
             if (!response.ok && response.status !== 404) {
                 throw new Error(`Could not leave room (${response.status})`);
             }
-        } catch (error) {
-            setRoomError(
-                error instanceof Error
-                    ? error.message
-                    : "Failed to leave room."
-            );
+        } catch {
+            // Ignore leave errors — navigate away regardless
         } finally {
             setRoomSession(null);
             setIsReady(false);
             setShowDiagnostics(false);
-            setRoomError("");
         }
     };
 
@@ -735,59 +716,12 @@ function App() {
     }
 
     return (
-        <main className="app">
-            <header>
-                <div className="brand">
-                    वाक् <span>Vāk</span>
-                </div>
-                <p>Make different languages disappear.</p>
-            </header>
-
-            <section className="panel">
-                <h1>Room {roomSession.roomCode}</h1>
-
-                <p className="subheading">
-                    Welcome, {roomSession.displayName}.
-                    You're in a multilingual room.
-                </p>
-
-                <div className="room-details">
-                    <p>
-                        <strong>Speaking:</strong>{" "}
-                        {roomSession.spokenLanguage}
-                    </p>
-
-                    <p>
-                        <strong>Listening:</strong>{" "}
-                        {roomSession.preferredLanguage}
-                    </p>
-                </div>
-
-                <div className="room-actions">
-                    <button onClick={copyRoomCode}>
-                        {copied ? "Copied!" : "Copy room code"}
-                    </button>
-
-                    <button onClick={() => setShowDiagnostics(true)}>
-                        Open single-user diagnostics
-                    </button>
-
-                    <button className="stop" onClick={leaveRoom}>
-                        Leave room
-                    </button>
-                </div>
-
-                {roomError && (
-                    <div className="error">{roomError}</div>
-                )}
-
-                <RoomPresence
-                    roomSession={roomSession}
-                    playbackContext={playbackContext}
-                    initialMicStream={micStream}
-                />
-            </section>
-        </main>
+        <RoomPresence
+            roomSession={roomSession}
+            playbackContext={playbackContext}
+            initialMicStream={micStream}
+            onLeaveRoom={() => void leaveRoom()}
+        />
     );
 }
 
