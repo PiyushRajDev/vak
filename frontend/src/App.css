@@ -331,38 +331,210 @@ input:focus, select:focus {
     margin-bottom: 8px;
 }
 
-.room-audio-controls {
+/* ==================================================
+   SHARED BUTTONS & BRANDING
+   ================================================== */
+
+.brand-header {
+    margin-bottom: 32px;
+    text-align: center;
+}
+
+.brand {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.brand-indic {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+}
+
+.brand-latin {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    padding: 10px 18px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background-color: var(--accent);
+    color: #ffffff;
+    border-color: var(--accent);
+}
+
+.btn-primary:hover:not(:disabled) {
+    background-color: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
+.btn-large {
+    padding: 14px 24px;
+    font-size: 16px;
+    width: 100%;
+}
+
+.btn-ghost {
+    background-color: transparent;
+    color: var(--text-secondary);
+    border-color: var(--border-subtle);
+}
+
+.btn-ghost:hover:not(:disabled) {
+    background-color: var(--bg-surface-hover);
+    color: var(--text-primary);
+}
+
+/* ==================================================
+   GATE / ONBOARDING SCREEN (PHASE 1)
+   ================================================== */
+
+.gate-app {
+    max-width: 480px;
+    margin: 80px auto;
+}
+
+.gate-panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    padding: 36px 32px;
+    text-align: center;
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    margin: 20px 0;
-    padding: 16px;
-    border: 1px solid #292c34;
-    border-radius: 10px;
-    background: #15171c;
+    align-items: center;
 }
 
-.room-audio-status {
+.gate-ready-badge {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    background: var(--accent-dim);
+    border: 1px solid var(--accent-border);
+    padding: 4px 10px;
+    border-radius: 20px;
+    margin-bottom: 24px;
+}
+
+.gate-language-pair {
     display: flex;
     align-items: center;
-    gap: 8px;
-    color: #a0a4ad;
+    justify-content: center;
+    gap: 16px;
+    margin: 8px 0 24px;
+    width: 100%;
+}
+
+.gate-lang-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+}
+
+.gate-lang-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+}
+
+.gate-lang-value {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.gate-lang-native {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.gate-lang-en {
     font-size: 13px;
+    color: var(--text-secondary);
 }
 
-.room-transcript-feed {
-    margin-top: 30px;
+.gate-arrow {
+    font-size: 20px;
+    color: var(--text-muted);
+    user-select: none;
 }
 
-.room-transcript-feed .transcript-heading {
-    margin-bottom: 16px;
+.gate-instruction {
+    font-size: 17px;
+    color: var(--text-primary);
+    line-height: 1.45;
+    margin: 0 0 20px;
 }
 
-.room-transcript-feed .transcript {
-    margin-bottom: 12px;
+.gate-headphone-tip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--bg-surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 28px;
+    width: 100%;
 }
 
-.room-transcript-feed .transcript strong {
-    display: block;
-    margin-bottom: 8px;
+.gate-headphone-tip svg {
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.gate-error-banner {
+    background-color: var(--accent-dim);
+    border: 1px solid var(--accent-border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    width: 100%;
+}
+
+.gate-error-banner p {
+    color: #fca5a5;
+    font-size: 14px;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.gate-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
 }

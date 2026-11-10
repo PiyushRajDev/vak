@@ -61,6 +61,8 @@ type TurnAudioBuffer = {
 
 type Props = {
     roomSession: RoomSession;
+    playbackContext?: AudioContext | null;
+    initialMicStream?: MediaStream | null;
 };
 
 type PendingSttStart = {
@@ -132,7 +134,11 @@ function normalizeParticipants(raw: unknown[]): Participant[] {
 // ROOM PRESENCE COMPONENT
 // ==================================================
 
-export default function RoomPresence({ roomSession }: Props) {
+export default function RoomPresence({
+    roomSession,
+    playbackContext: initialPlaybackContext,
+    initialMicStream,
+}: Props) {
 
     // --------------------------------------------------
     // STATE
@@ -160,10 +166,14 @@ export default function RoomPresence({ roomSession }: Props) {
 
     // Audio output.
     const [isAudioEnabled, setIsAudioEnabled] =
-        useState(false);
+        useState(!!initialPlaybackContext);
 
     const [playbackStatus, setPlaybackStatus] =
-        useState("Audio playback disabled");
+        useState(
+            initialPlaybackContext
+                ? "Audio enabled"
+                : "Audio playback disabled"
+        );
 
     // --------------------------------------------------
     // REFERENCES
@@ -193,7 +203,16 @@ export default function RoomPresence({ roomSession }: Props) {
     const sttStartTimeoutRef = useRef<number | null>(null);
 
     // TTS playback.
-    const playbackContextRef = useRef<AudioContext | null>(null);
+    const playbackContextRef = useRef<AudioContext | null>(
+        initialPlaybackContext || null
+    );
+
+    useEffect(() => {
+        if (initialPlaybackContext) {
+            playbackContextRef.current = initialPlaybackContext;
+            setIsAudioEnabled(true);
+        }
+    }, [initialPlaybackContext]);
 
     const nextPlaybackTimeRef = useRef(0);
 
@@ -239,21 +258,26 @@ export default function RoomPresence({ roomSession }: Props) {
     // --------------------------------------------------
 
     const startMicrophone = useCallback(async () => {
-        if (!navigator.mediaDevices?.getUserMedia) {
-            throw new Error("Microphone access is unavailable.");
-        }
-
         try {
-            // 1. Request microphone access.
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    channelCount: 1,
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true,
-                },
-                video: false,
-            });
+            // 1. Get or reuse microphone stream.
+            let stream = micStreamRef.current;
+            if (!stream || !stream.active) {
+                if (initialMicStream && initialMicStream.active) {
+                    stream = initialMicStream;
+                } else if (navigator.mediaDevices?.getUserMedia) {
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            channelCount: 1,
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true,
+                        },
+                        video: false,
+                    });
+                } else {
+                    throw new Error("Microphone access is unavailable.");
+                }
+            }
 
             micStreamRef.current = stream;
 
@@ -335,7 +359,7 @@ export default function RoomPresence({ roomSession }: Props) {
             await stopMicrophone();
             throw err;
         }
-    }, [stopMicrophone]);
+    }, [stopMicrophone, initialMicStream]);
 
     // --------------------------------------------------
     // START SPEAKING

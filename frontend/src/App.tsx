@@ -1,6 +1,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
+import ReadyGate from "./components/ReadyGate";
 import RoomLobby from "./components/RoomLobby";
 import RoomPresence from "./components/RoomPresence";
 
@@ -629,6 +630,10 @@ const API_BASE_URL =
 function App() {
     const [roomSession, setRoomSession] =
         useState<RoomSession | null>(null);
+    const [isReady, setIsReady] = useState(false);
+    const [playbackContext, setPlaybackContext] =
+        useState<AudioContext | null>(null);
+    const [micStream, setMicStream] = useState<MediaStream | null>(null);
 
     const [showDiagnostics, setShowDiagnostics] = useState(false);
     const [copied, setCopied] = useState(false);
@@ -649,6 +654,16 @@ function App() {
     const leaveRoom = async () => {
         if (!roomSession) return;
 
+        if (micStream) {
+            micStream.getTracks().forEach(track => track.stop());
+            setMicStream(null);
+        }
+
+        if (playbackContext && playbackContext.state !== "closed") {
+            void playbackContext.close();
+            setPlaybackContext(null);
+        }
+
         try {
             const response = await fetch(
                 `${API_BASE_URL}/api/rooms/${roomSession.roomCode}/participants/${roomSession.participantId}`,
@@ -663,21 +678,46 @@ function App() {
             if (!response.ok && response.status !== 404) {
                 throw new Error(`Could not leave room (${response.status})`);
             }
-
-            setRoomSession(null);
-            setShowDiagnostics(false);
-            setRoomError("");
         } catch (error) {
             setRoomError(
                 error instanceof Error
                     ? error.message
                     : "Failed to leave room."
             );
+        } finally {
+            setRoomSession(null);
+            setIsReady(false);
+            setShowDiagnostics(false);
+            setRoomError("");
         }
     };
 
     if (!roomSession) {
-        return <RoomLobby onJoined={setRoomSession} />;
+        return (
+            <RoomLobby
+                onJoined={session => {
+                    setRoomSession(session);
+                    setIsReady(false);
+                }}
+            />
+        );
+    }
+
+    if (!isReady) {
+        return (
+            <ReadyGate
+                roomSession={roomSession}
+                onStart={(stream, context) => {
+                    setMicStream(stream);
+                    setPlaybackContext(context);
+                    setIsReady(true);
+                }}
+                onCancel={() => {
+                    setRoomSession(null);
+                    setIsReady(false);
+                }}
+            />
+        );
     }
 
     if (showDiagnostics) {
@@ -741,7 +781,11 @@ function App() {
                     <div className="error">{roomError}</div>
                 )}
 
-                <RoomPresence roomSession={roomSession} />
+                <RoomPresence
+                    roomSession={roomSession}
+                    playbackContext={playbackContext}
+                    initialMicStream={micStream}
+                />
             </section>
         </main>
     );
