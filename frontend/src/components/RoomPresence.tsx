@@ -6,6 +6,7 @@ import {
     useState,
 } from "react";
 import ConversationFeed, { type ConversationMessage } from "./ConversationFeed";
+import ParticipantTiles from "./ParticipantTiles";
 import StatusLine from "./StatusLine";
 import { getLanguage } from "../languages";
 
@@ -1327,65 +1328,12 @@ export default function RoomPresence({
                 </div>
             )}
 
-            {/* PARTICIPANT HEADING */}
-            <div className="transcript-heading">
-                <h2>Participants</h2>
-                <span>{participants.length} / 3</span>
-            </div>
-
-            {/* PARTICIPANT ROSTER */}
-            <div className="participant-list">
-                {participants.map(participant => {
-                    const isSelf =
-                        participant.id === roomSession.participantId;
-
-                    return (
-                        <article
-                            className="participant-row"
-                            key={participant.id}
-                        >
-                            <div className="participant-avatar">
-                                {participant.displayName
-                                    .charAt(0)
-                                    .toUpperCase()}
-                            </div>
-
-                            <div className="participant-info">
-                                <strong>
-                                    {participant.displayName}
-                                    {isSelf ? " (You)" : ""}
-                                </strong>
-
-                                <span>
-                                    {participant.spokenLanguage}
-                                    {" → "}
-                                    {participant.preferredLanguage}
-                                </span>
-                            </div>
-
-                            <div className="participant-state">
-                                <span>
-                                    {participant.isMuted
-                                        ? "Muted"
-                                        : "Unmuted"}
-                                </span>
-
-                                <span>
-                                    {participant.connected
-                                        ? "Online"
-                                        : "Connecting"}
-                                </span>
-                            </div>
-                        </article>
-                    );
-                })}
-
-                {participants.length === 0 && (
-                    <div className="empty">
-                        Waiting for room participants...
-                    </div>
-                )}
-            </div>
+            {/* PARTICIPANT TILES (PHASE 4) */}
+            <ParticipantTiles
+                participants={participants}
+                selfParticipantId={roomSession.participantId}
+                activeSpeakerId={activeSpeaker?.id || null}
+            />
 
             {/* LIVE CONVERSATION TRANSCRIPT (HERO) */}
             <ConversationFeed

@@ -805,3 +805,135 @@ input:focus, select:focus {
     font-size: 13px;
     border-radius: 6px;
 }
+
+/* ==================================================
+   PARTICIPANT TILES & SPEAKING RING (PHASE 4)
+   ================================================== */
+
+.participant-tiles-container {
+    margin: 16px 0 20px;
+}
+
+.participant-tiles-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.participant-tile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--bg-surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    flex: 1;
+    min-width: 140px;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.tile-self {
+    border-color: var(--border-strong);
+}
+
+.tile-speaking {
+    border-color: var(--accent-border);
+    background: #191b22;
+}
+
+.tile-avatar-wrap {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+}
+
+.tile-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #252833;
+    color: var(--text-primary);
+    display: grid;
+    place-items: center;
+    font-size: 14px;
+    font-weight: 600;
+    transition: box-shadow 0.2s ease;
+}
+
+/* The only animation in the UI: subtle speaking ring */
+@keyframes speaking-ring {
+    0% {
+        box-shadow: 0 0 0 0 rgba(224, 83, 56, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 6px rgba(224, 83, 56, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(224, 83, 56, 0);
+    }
+}
+
+.avatar-speaking {
+    box-shadow: 0 0 0 2px var(--accent);
+    animation: speaking-ring 1.8s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+}
+
+.tile-online-dot {
+    position: absolute;
+    bottom: -1px;
+    right: -1px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 2px solid var(--bg-surface-raised);
+}
+
+.dot-online {
+    background-color: #10b981;
+}
+
+.dot-offline {
+    background-color: #64748b;
+}
+
+.tile-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.tile-name-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.tile-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tile-you-pill {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--bg-surface-hover);
+    color: var(--text-secondary);
+}
+
+.tile-spoken-native {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
