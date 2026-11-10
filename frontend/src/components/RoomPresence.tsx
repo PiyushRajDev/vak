@@ -6,6 +6,8 @@ import {
     useState,
 } from "react";
 import ConversationFeed, { type ConversationMessage } from "./ConversationFeed";
+import StatusLine from "./StatusLine";
+import { getLanguage } from "../languages";
 
 type RoomSession = {
     roomCode: string;
@@ -145,13 +147,22 @@ export default function RoomPresence({
 
     const [error, setError] = useState("");
 
-    // Microphone.
-    const [isSpeaking, setIsSpeaking] = useState(false);
+    // Microphone & mute state (Phase 3)
     const [isStarting, setIsStarting] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
+    const isMutedRef = useRef(false);
+    const isEchoSuppressedRef = useRef(false);
 
-    const [audioStatus, setAudioStatus] =
-        useState("Microphone off");
+    // Active speaker & status states (Phase 3)
+    const [activeSpeaker, setActiveSpeaker] = useState<{
+        id: string;
+        displayName: string;
+    } | null>(null);
+    const speakerActivityTimerRef = useRef<number | null>(null);
+
+    const [isProcessingTranslation, setIsProcessingTranslation] =
+        useState(false);
+    const [micError, setMicError] = useState<string | null>(null);
 
     // Room conversation messages (Phase 2)
     const [messages, setMessages] =
@@ -159,17 +170,6 @@ export default function RoomPresence({
 
     const [playingTurnId, setPlayingTurnId] =
         useState<string | null>(null);
-
-    // Audio output.
-    const [isAudioEnabled, setIsAudioEnabled] =
-        useState(!!initialPlaybackContext);
-
-    const [playbackStatus, setPlaybackStatus] =
-        useState(
-            initialPlaybackContext
-                ? "Audio enabled"
-                : "Audio playback disabled"
-        );
 
     // --------------------------------------------------
     // REFERENCES
@@ -206,7 +206,6 @@ export default function RoomPresence({
     useEffect(() => {
         if (initialPlaybackContext) {
             playbackContextRef.current = initialPlaybackContext;
-            setIsAudioEnabled(true);
         }
     }, [initialPlaybackContext]);
 
@@ -245,8 +244,6 @@ export default function RoomPresence({
         if (context && context.state !== "closed") {
             await context.close();
         }
-
-        setIsSpeaking(false);
     }, []);
 
     // --------------------------------------------------
@@ -317,7 +314,7 @@ export default function RoomPresence({
 
             micGainRef.current = gain;
 
-            // 6. Forward microphone PCM to the room WebSocket.
+            // 6. Forward microphone PCM to the room WebSocket (with Echo Prevention).
             processor.port.onmessage = (
                 event: MessageEvent<ArrayBuffer>
             ) => {
@@ -325,6 +322,8 @@ export default function RoomPresence({
 
                 if (
                     !audioReadyRef.current ||
+                    isMutedRef.current ||
+                    isEchoSuppressedRef.current ||
                     socket?.readyState !== WebSocket.OPEN ||
                     socket.bufferedAmount >= 64 * 1024
                 ) {
@@ -348,9 +347,6 @@ export default function RoomPresence({
             processor.connect(gain);
             gain.connect(context.destination);
 
-            setIsSpeaking(true);
-            setAudioStatus("Listening — microphone audio is streaming");
-
         } catch (err) {
             await stopMicrophone();
             throw err;
@@ -358,27 +354,24 @@ export default function RoomPresence({
     }, [stopMicrophone, initialMicStream]);
 
     // --------------------------------------------------
-    // START SPEAKING
+    // AUDIO SESSION INITIALIZATION (MEET STYLE)
     // --------------------------------------------------
 
-    const startSpeaking = async () => {
+    const startAudioSession = useCallback(async () => {
         const socket = wsRef.current;
 
         if (
             socket?.readyState !== WebSocket.OPEN ||
             isStarting ||
-            isSpeaking ||
-            isMuted
+            isMutedRef.current
         ) {
             return;
         }
 
-        setError("");
         setIsStarting(true);
-        setAudioStatus("Opening Prisma session...");
+        setMicError(null);
 
         try {
-            // Register waiter BEFORE sending start_audio.
             const readyPromise = new Promise<void>((resolve, reject) => {
                 pendingSttStartRef.current = {
                     resolve,
@@ -391,7 +384,7 @@ export default function RoomPresence({
 
                     reject(
                         new Error(
-                            "Timed out waiting for Prisma to become ready."
+                            "Timed out waiting for speech service."
                         )
                     );
                 }, 15000);
@@ -401,24 +394,14 @@ export default function RoomPresence({
                 type: "start_audio",
             }));
 
-            // Wait for backend confirmation.
             await readyPromise;
-
-            setAudioStatus("Prisma ready — initializing microphone...");
-
             await startMicrophone();
 
         } catch (err) {
-            const message =
-                err instanceof Error
-                    ? err.message
-                    : "Could not start microphone.";
-
-            setError(message);
-            setAudioStatus("Microphone failed");
+            console.error("Microphone session failed:", err);
+            setMicError("Mic blocked. Check your browser permission.");
 
             const currentSocket = wsRef.current;
-
             if (currentSocket?.readyState === WebSocket.OPEN) {
                 currentSocket.send(JSON.stringify({
                     type: "stop_audio",
@@ -430,62 +413,41 @@ export default function RoomPresence({
         } finally {
             setIsStarting(false);
         }
-    };
+    }, [isStarting, startMicrophone, stopMicrophone]);
 
     // --------------------------------------------------
-    // STOP SPEAKING
+    // MUTE / UNMUTE (MEET STYLE - STRICT BOOLEAN)
     // --------------------------------------------------
 
-    const stopSpeaking = async () => {
-        audioReadyRef.current = false;
-
-        await stopMicrophone();
-
+    const toggleMute = useCallback(async (forcedState?: boolean) => {
         const socket = wsRef.current;
 
-        if (socket?.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({
-                type: "stop_audio",
-            }));
-        }
-
-        setAudioStatus("Microphone stopped");
-    };
-
-    // --------------------------------------------------
-    // MUTE / UNMUTE
-    // --------------------------------------------------
-
-    const toggleMute = async () => {
-        const socket = wsRef.current;
-
-        if (
-            socket?.readyState !== WebSocket.OPEN ||
-            isStarting
-        ) {
+        if (socket?.readyState !== WebSocket.OPEN) {
             return;
         }
 
-        const nextMuted = !isMuted;
+        // Fix isMuted type bug: GUARANTEE primitive boolean
+        const nextMuted: boolean =
+            typeof forcedState === "boolean"
+                ? forcedState
+                : Boolean(!isMutedRef.current);
+
+        isMutedRef.current = nextMuted;
+        setIsMuted(nextMuted);
 
         if (nextMuted) {
-            await stopMicrophone();
+            audioReadyRef.current = false;
+        } else {
+            if (!audioReadyRef.current) {
+                void startAudioSession();
+            }
         }
 
-        const currentSocket = wsRef.current;
-
-        if (currentSocket?.readyState !== WebSocket.OPEN) {
-            return;
-        }
-
-        setAudioStatus("Updating mute state...");
-
-        // Backend expects isMuted, not muted.
-        currentSocket.send(JSON.stringify({
+        socket.send(JSON.stringify({
             type: "set_mute",
-            isMuted: nextMuted,
+            isMuted: nextMuted === true,
         }));
-    };
+    }, [startAudioSession]);
 
     // ==================================================
     // TTS AUDIO PLAYBACK
@@ -548,10 +510,14 @@ export default function RoomPresence({
             startAt + audioBuffer.duration;
 
         if (turnId) {
+            // Echo prevention: pause mic capture while translated audio is playing
+            isEchoSuppressedRef.current = true;
             setPlayingTurnId(turnId);
+
             source.onended = () => {
                 const now = playbackContextRef.current?.currentTime ?? 0;
                 if (now >= nextPlaybackTimeRef.current - 0.08) {
+                    isEchoSuppressedRef.current = false;
                     setPlayingTurnId(current =>
                         current === turnId ? null : current
                     );
@@ -600,8 +566,6 @@ export default function RoomPresence({
                         ? err.message
                         : "Audio playback failed."
                 );
-
-                setPlaybackStatus("Audio playback error");
                 break;
             }
 
@@ -615,57 +579,7 @@ export default function RoomPresence({
     }, [schedulePcmChunk]);
 
     // --------------------------------------------------
-    // 3. ENABLE BROWSER AUDIO
-    // --------------------------------------------------
-
-    const enableAudio = useCallback(async () => {
-        try {
-            let context = playbackContextRef.current;
-
-            if (!context || context.state === "closed") {
-                context = new AudioContext({
-                    sampleRate: 48000,
-                });
-
-                playbackContextRef.current = context;
-
-                nextPlaybackTimeRef.current = 0;
-            }
-
-            if (context.state === "suspended") {
-                await context.resume();
-            }
-
-            if (context.state !== "running") {
-                throw new Error(
-                    "Browser audio output could not be activated."
-                );
-            }
-
-            setIsAudioEnabled(true);
-
-            setPlaybackStatus(
-                "Audio enabled — waiting for translated speech"
-            );
-
-            // Play any audio already buffered.
-            for (const turnId of turnAudioBuffersRef.current.keys()) {
-                drainTurnBuffer(turnId);
-            }
-
-        } catch (err) {
-            setError(
-                err instanceof Error
-                    ? err.message
-                    : "Could not enable audio."
-            );
-
-            setPlaybackStatus("Audio activation failed");
-        }
-    }, [drainTurnBuffer]);
-
-    // --------------------------------------------------
-    // 4. DECODE ROOM BINARY AUDIO ENVELOPE
+    // 3. DECODE ROOM BINARY AUDIO ENVELOPE
     // --------------------------------------------------
 
     const processRoomAudioPacket = useCallback((
@@ -802,17 +716,12 @@ export default function RoomPresence({
                 sampleRate,
             });
 
-            setPlaybackStatus("Receiving translated speech...");
-
             // This plays immediately when audio has been enabled.
             // Otherwise, the data remains buffered.
             drainTurnBuffer(metadata.turnId);
 
         } catch (err) {
             console.error("Room audio decoding failed:", err);
-
-            setPlaybackStatus("Could not decode incoming audio");
-
         }
     }, [
         roomSession.roomCode,
@@ -883,15 +792,9 @@ export default function RoomPresence({
                     );
 
                     if (selfParticipant) {
-                        setIsMuted(selfParticipant.isMuted);
-
-                        setAudioStatus(current =>
-                            selfParticipant.isMuted
-                                ? "Muted"
-                                : current === "Muted"
-                                    ? "Microphone off"
-                                    : current
-                        );
+                        const serverMuted = selfParticipant.isMuted === true;
+                        isMutedRef.current = serverMuted;
+                        setIsMuted(serverMuted);
                     }
 
                     setError("");
@@ -982,6 +885,9 @@ export default function RoomPresence({
                     case "room_joined": {
                         setConnectionStatus("Connected");
                         void refreshRoster();
+                        if (!isMutedRef.current) {
+                            void startAudioSession();
+                        }
                         break;
                     }
 
@@ -991,6 +897,37 @@ export default function RoomPresence({
 
                     case "room_updated": {
                         void refreshRoster();
+                        break;
+                    }
+
+                    // --------------------------------------
+                    // Speaker activity (speech detected).
+                    // --------------------------------------
+
+                    case "speaker_activity": {
+                        const speaker = message.speaker ?? {};
+                        if (speaker.id) {
+                            setActiveSpeaker({
+                                id: speaker.id,
+                                displayName:
+                                    speaker.displayName || "Participant",
+                            });
+
+                            if (speakerActivityTimerRef.current !== null) {
+                                window.clearTimeout(
+                                    speakerActivityTimerRef.current
+                                );
+                            }
+
+                            speakerActivityTimerRef.current =
+                                window.setTimeout(() => {
+                                    setActiveSpeaker(current =>
+                                        current?.id === speaker.id
+                                            ? null
+                                            : current
+                                    );
+                                }, 3000);
+                        }
                         break;
                     }
 
@@ -1012,8 +949,6 @@ export default function RoomPresence({
                         const pending = pendingSttStartRef.current;
                         pendingSttStartRef.current = null;
 
-                        setAudioStatus("Prisma session ready");
-
                         pending?.resolve();
 
                         break;
@@ -1024,6 +959,9 @@ export default function RoomPresence({
                     // --------------------------------------
 
                     case "speaker_transcript": {
+                        setActiveSpeaker(null);
+                        setIsProcessingTranslation(true);
+
                         const speaker = message.speaker ?? {};
                         const transcript = message.transcript ?? {};
 
@@ -1110,6 +1048,7 @@ export default function RoomPresence({
                     // --------------------------------------
 
                     case "translation": {
+                        setIsProcessingTranslation(false);
                         const turnId = message.turnId;
                         const speakerId = message.speaker?.id;
                         const originalText = message.originalText;
@@ -1173,13 +1112,6 @@ export default function RoomPresence({
                             });
                         }
 
-                        setPlaybackStatus(
-                            `Translating into ${
-                                message.targetLanguage ??
-                                roomSession.preferredLanguage
-                            }...`
-                        );
-
                         break;
                     }
 
@@ -1205,38 +1137,39 @@ export default function RoomPresence({
                             }
                         }
 
-                        setPlaybackStatus(
-                            isAudioEnabled
-                                ? "Translated speech received"
-                                : "Translated speech buffered — enable audio"
-                        );
-
                         break;
                     }
 
                     // --------------------------------------
-                    // STT or room errors.
+                    // STT or room errors (sanitized for user).
                     // --------------------------------------
 
-                    case "stt_error":
+                    case "stt_error": {
+                        const messageText = message.message || "Microphone service error.";
+                        audioReadyRef.current = false;
+                        clearPendingStart(messageText);
+                        setMicError("Mic service unavailable. Try again.");
+                        break;
+                    }
+
                     case "error":
                     case "room_error":
                     case "auth_error": {
-                        const messageText =
-                            message.message || "Room connection error.";
-
+                        const messageText = String(message.message || "");
                         audioReadyRef.current = false;
-
                         clearPendingStart(messageText);
 
-                        setError(messageText);
-                        setAudioStatus("Audio error");
-
-                        if (
-                            message.type === "room_error" ||
-                            message.type === "auth_error"
+                        if (messageText.toLowerCase().includes("mute")) {
+                            // Handled silently
+                        } else if (
+                            message.type === "auth_error" ||
+                            messageText.toLowerCase().includes("auth") ||
+                            messageText.toLowerCase().includes("token")
                         ) {
+                            setError("Session expired. Please rejoin.");
                             setConnectionStatus("Connection error");
+                        } else {
+                            setError("Connection error. Reconnecting…");
                         }
 
                         break;
@@ -1278,7 +1211,6 @@ export default function RoomPresence({
 
                 if (!disposed) {
                     setConnectionStatus("Disconnected");
-                    setAudioStatus("Room connection closed");
                 }
             };
         };
@@ -1344,122 +1276,65 @@ export default function RoomPresence({
     ]);
 
     // ==================================================
+    // DERIVED STATE (PHASE 3)
+    // ==================================================
+
+    const derivedMicState = (() => {
+        if (activeSpeaker?.id === roomSession.participantId) {
+            return "You're speaking";
+        }
+        if (isProcessingTranslation) {
+            return "Translating…";
+        }
+        if (playingTurnId) {
+            const lang = getLanguage(roomSession.preferredLanguage);
+            return `Playing in ${lang.nativeName}`;
+        }
+        return "Mic on";
+    })();
+
+    const connectedCount =
+        participants.filter(p => p.connected).length || 1;
+
+    const listenerCount = participants.filter(
+        p =>
+            p.id !== (activeSpeaker?.id || roomSession.participantId) &&
+            p.connected
+    ).length;
+
+    // ==================================================
     // USER INTERFACE
     // ==================================================
 
     return (
         <section className="room-presence">
 
-            {/* PARTICIPANT HEADING */}
-
-            <div className="transcript-heading">
-                <h2>Participants</h2>
-
-                <span>
-                    {participants.length} / 3
-                </span>
-            </div>
-
-            {/* ROOM CONNECTION */}
-
-            <div className="room-connection">
-                <span
-                    className={`status-dot ${
-                        connectionStatus === "Connected"
-                            ? "active"
-                            : ""
-                    }`}
-                />
-
-                {connectionStatus}
-            </div>
+            {/* STATUS LINE (PHASE 3) */}
+            <StatusLine
+                connectedCount={connectedCount}
+                activeSpeaker={activeSpeaker}
+                isProcessingTranslation={isProcessingTranslation}
+                playingTurnLanguage={
+                    playingTurnId ? roomSession.preferredLanguage : null
+                }
+                selfParticipantId={roomSession.participantId}
+                listenerCount={listenerCount}
+            />
 
             {error && (
-                <div className="error">
+                <div className="room-error-notice" role="alert">
                     {error}
                 </div>
             )}
 
-            {/* AUDIO OUTPUT CONTROLS */}
-
-            <div className="room-audio-controls">
-
-                <div className="room-audio-status">
-                    <span
-                        className={`status-dot ${
-                            isAudioEnabled ? "active" : ""
-                        }`}
-                    />
-
-                    {playbackStatus}
-                </div>
-
-                <button
-                    onClick={enableAudio}
-                    disabled={isAudioEnabled}
-                >
-                    {isAudioEnabled
-                        ? "Audio enabled"
-                        : "Enable audio"}
-                </button>
-
-            </div>
-
-            {/* MICROPHONE CONTROLS */}
-
-            <div className="room-audio-controls">
-
-                <div className="room-audio-status">
-                    <span
-                        className={`status-dot ${
-                            isSpeaking ? "active" : ""
-                        }`}
-                    />
-
-                    {audioStatus}
-                </div>
-
-                <div className="room-actions">
-
-                    <button
-                        onClick={startSpeaking}
-                        disabled={
-                            connectionStatus !== "Connected" ||
-                            isStarting ||
-                            isSpeaking ||
-                            isMuted
-                        }
-                    >
-                        {isStarting
-                            ? "Connecting..."
-                            : "Start speaking"}
-                    </button>
-
-                    <button
-                        className="stop"
-                        onClick={stopSpeaking}
-                        disabled={!isSpeaking}
-                    >
-                        Stop speaking
-                    </button>
-
-                    <button
-                        onClick={toggleMute}
-                        disabled={
-                            connectionStatus !== "Connected" ||
-                            isStarting
-                        }
-                    >
-                        {isMuted ? "Unmute" : "Mute"}
-                    </button>
-
-                </div>
+            {/* PARTICIPANT HEADING */}
+            <div className="transcript-heading">
+                <h2>Participants</h2>
+                <span>{participants.length} / 3</span>
             </div>
 
             {/* PARTICIPANT ROSTER */}
-
             <div className="participant-list">
-
                 {participants.map(participant => {
                     const isSelf =
                         participant.id === roomSession.participantId;
@@ -1469,7 +1344,6 @@ export default function RoomPresence({
                             className="participant-row"
                             key={participant.id}
                         >
-
                             <div className="participant-avatar">
                                 {participant.displayName
                                     .charAt(0)
@@ -1477,7 +1351,6 @@ export default function RoomPresence({
                             </div>
 
                             <div className="participant-info">
-
                                 <strong>
                                     {participant.displayName}
                                     {isSelf ? " (You)" : ""}
@@ -1488,11 +1361,9 @@ export default function RoomPresence({
                                     {" → "}
                                     {participant.preferredLanguage}
                                 </span>
-
                             </div>
 
                             <div className="participant-state">
-
                                 <span>
                                     {participant.isMuted
                                         ? "Muted"
@@ -1504,9 +1375,7 @@ export default function RoomPresence({
                                         ? "Online"
                                         : "Connecting"}
                                 </span>
-
                             </div>
-
                         </article>
                     );
                 })}
@@ -1516,7 +1385,6 @@ export default function RoomPresence({
                         Waiting for room participants...
                     </div>
                 )}
-
             </div>
 
             {/* LIVE CONVERSATION TRANSCRIPT (HERO) */}
@@ -1526,6 +1394,74 @@ export default function RoomPresence({
                 participants={participants}
                 selfParticipantId={roomSession.participantId}
             />
+
+            {/* SINGLE MEET-STYLE MIC CONTROL (PHASE 3) */}
+            <div className="room-mic-bar">
+                {micError ? (
+                    <div className="mic-error-pill">
+                        <span className="mic-error-text">{micError}</span>
+                        <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            onClick={() => void startAudioSession()}
+                        >
+                            Try again
+                        </button>
+                    </div>
+                ) : (
+                    <button
+                        type="button"
+                        className={`btn-meet-mic ${
+                            isMuted ? "btn-meet-muted" : "btn-meet-active"
+                        }`}
+                        onClick={() => void toggleMute()}
+                        disabled={connectionStatus !== "Connected" || isStarting}
+                        aria-label={
+                            isMuted ? "Unmute microphone" : "Mute microphone"
+                        }
+                    >
+                        <span className="meet-mic-icon">
+                            {isMuted ? (
+                                <svg
+                                    width="20"
+                                    height="20"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                >
+                                    <line x1="1" y1="1" x2="23" y2="23" />
+                                    <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
+                                    <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
+                                    <line x1="12" y1="19" x2="12" y2="23" />
+                                    <line x1="8" y1="23" x2="16" y2="23" />
+                                </svg>
+                            ) : (
+                                <svg
+                                    width="20"
+                                    height="20"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                >
+                                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                    <line x1="12" y1="19" x2="12" y2="23" />
+                                    <line x1="8" y1="23" x2="16" y2="23" />
+                                </svg>
+                            )}
+                        </span>
+                        <span className="meet-mic-label">
+                            {isMuted ? "Muted" : derivedMicState}
+                        </span>
+                    </button>
+                )}
+            </div>
 
         </section>
     );
