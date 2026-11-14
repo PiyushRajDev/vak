@@ -629,7 +629,22 @@ const API_BASE_URL =
 
 function App() {
     const [roomSession, setRoomSession] =
-        useState<RoomSession | null>(null);
+        useState<RoomSession | null>(() => {
+            if (typeof window === "undefined") return null;
+            const params = new URLSearchParams(window.location.search);
+            if (params.get("mock") === "room") {
+                return {
+                    roomCode: "VAK789",
+                    participantId: "mock-p1",
+                    participantToken: "mock-token",
+                    displayName: "Priya",
+                    spokenLanguage: "hi-IN",
+                    preferredLanguage: "ta-IN",
+                    isAdmin: true,
+                };
+            }
+            return null;
+        });
     const [playbackContext, setPlaybackContext] =
         useState<AudioContext | null>(null);
     const [micStream, setMicStream] = useState<MediaStream | null>(null);

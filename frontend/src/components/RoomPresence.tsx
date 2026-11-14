@@ -161,11 +161,21 @@ export default function RoomPresence({
     // STATE
     // --------------------------------------------------
 
+    const isMock = roomSession.participantId === "mock-p1";
+
     const [participants, setParticipants] =
-        useState<Participant[]>([]);
+        useState<Participant[]>(() => {
+            if (isMock) {
+                return [
+                    { id: "mock-p1", displayName: "Priya", spokenLanguage: "hi-IN", preferredLanguage: "ta-IN", isMuted: false, connected: true },
+                    { id: "mock-p2", displayName: "Karthik", spokenLanguage: "ta-IN", preferredLanguage: "hi-IN", isMuted: false, connected: true },
+                ];
+            }
+            return [];
+        });
 
     const [connectionState, setConnectionState] =
-        useState<ConnectionState>("connecting");
+        useState<ConnectionState>(() => (isMock ? "connected" : "connecting"));
     const reconnectAttemptsRef = useRef(0);
     const reconnectTimerRef = useRef<number | null>(null);
     const connectFnRef = useRef<(() => void) | null>(null);
@@ -205,7 +215,7 @@ export default function RoomPresence({
     const [activeSpeaker, setActiveSpeaker] = useState<{
         id: string;
         displayName: string;
-    } | null>(null);
+    } | null>(() => (isMock ? { id: "mock-p2", displayName: "Karthik" } : null));
     const speakerActivityTimerRef = useRef<number | null>(null);
 
     const [isProcessingTranslation, setIsProcessingTranslation] =
@@ -213,7 +223,14 @@ export default function RoomPresence({
     const [micError, setMicError] = useState<string | null>(null);
 
     // Live Captions on Tile (Signature feature: fades after 4s)
-    const [captionMap, setCaptionMap] = useState<Record<string, CaptionEntry>>({});
+    const [captionMap, setCaptionMap] = useState<Record<string, CaptionEntry>>(() => {
+        if (isMock) {
+            return {
+                "mock-p2": { text: "क्या कल कोई मीटिंग है?", active: true },
+            };
+        }
+        return {} as Record<string, CaptionEntry>;
+    });
     const captionTimersRef = useRef<Map<string, number>>(new Map());
 
     const triggerCaption = useCallback((speakerId: string, text: string) => {
@@ -273,7 +290,35 @@ export default function RoomPresence({
 
     // Room conversation messages (Phase 2)
     const [messages, setMessages] =
-        useState<ConversationMessage[]>([]);
+        useState<ConversationMessage[]>(() => {
+            if (isMock) {
+                return [
+                    {
+                        id: "m1",
+                        speakerId: "mock-p2",
+                        speakerName: "Karthik",
+                        sourceLanguage: "ta-IN",
+                        targetLanguage: "ta-IN",
+                        isSelf: false,
+                        originalText: "நாளைக்கு மீட்டிங் இருக்கா?",
+                        translatedText: "क्या कल कोई मीटिंग है?",
+                        timestamp: Date.now() - 10000,
+                        latencyMs: 380,
+                    },
+                    {
+                        id: "m2",
+                        speakerId: "mock-p1",
+                        speakerName: "Priya",
+                        sourceLanguage: "hi-IN",
+                        isSelf: true,
+                        originalText: "हाँ, सुबह दस बजे।",
+                        timestamp: Date.now() - 5000,
+                        latencyMs: 290,
+                    },
+                ];
+            }
+            return [];
+        });
 
     const [playingTurnId, setPlayingTurnId] =
         useState<string | null>(null);
@@ -941,6 +986,10 @@ export default function RoomPresence({
     // ==================================================
 
     useEffect(() => {
+        if (roomSession.participantId === "mock-p1") {
+            return;
+        }
+
         let disposed = false;
         let ws: WebSocket | null = null;
 
