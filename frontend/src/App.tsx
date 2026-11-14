@@ -1,8 +1,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
-import ReadyGate from "./components/ReadyGate";
-import RoomLobby from "./components/RoomLobby";
+import RoomLobby, { type RoomSession } from "./components/RoomLobby";
 import RoomPresence from "./components/RoomPresence";
 import { LANGUAGES } from "./languages";
 
@@ -20,16 +19,6 @@ type Translation = {
     sourceLanguage: string;
     targetLanguage: string;
     latencyMs: number;
-};
-
-type RoomSession = {
-    roomCode: string;
-    participantId: string;
-    participantToken: string;
-    displayName: string;
-    spokenLanguage: string;
-    preferredLanguage: string;
-    isAdmin?: boolean;
 };
 
 function SingleUserDemo() {
@@ -641,7 +630,6 @@ const API_BASE_URL =
 function App() {
     const [roomSession, setRoomSession] =
         useState<RoomSession | null>(null);
-    const [isReady, setIsReady] = useState(false);
     const [playbackContext, setPlaybackContext] =
         useState<AudioContext | null>(null);
     const [micStream, setMicStream] = useState<MediaStream | null>(null);
@@ -679,7 +667,6 @@ function App() {
             // Ignore leave errors — navigate away regardless
         } finally {
             setRoomSession(null);
-            setIsReady(false);
             setShowDiagnostics(false);
         }
     };
@@ -687,26 +674,10 @@ function App() {
     if (!roomSession) {
         return (
             <RoomLobby
-                onJoined={session => {
+                onJoined={(session, stream, ctx) => {
                     setRoomSession(session);
-                    setIsReady(false);
-                }}
-            />
-        );
-    }
-
-    if (!isReady) {
-        return (
-            <ReadyGate
-                roomSession={roomSession}
-                onStart={(stream, context) => {
                     setMicStream(stream);
-                    setPlaybackContext(context);
-                    setIsReady(true);
-                }}
-                onCancel={() => {
-                    setRoomSession(null);
-                    setIsReady(false);
+                    setPlaybackContext(ctx);
                 }}
             />
         );

@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { LANGUAGES, getLanguage } from "../languages";
+import Wordmark from "./Wordmark";
+import LanguagePicker from "./LanguagePicker";
 
 const API_BASE_URL =
     import.meta.env.VITE_API_BASE_URL ?? "";
@@ -15,7 +17,7 @@ export type RoomSession = {
 };
 
 type RoomLobbyProps = {
-    onJoined: (session: RoomSession) => void;
+    onJoined: (session: RoomSession, stream: MediaStream, playbackContext: AudioContext) => void;
 };
 
 type RoomApiResponse = {
@@ -34,21 +36,113 @@ type RoomApiResponse = {
 
 type LobbyView = "landing" | "create" | "join";
 
+async function unlockAudioAndGetMic(): Promise<{ playbackContext: AudioContext; stream: MediaStream }> {
+    // 1. Unlock AudioContext — must be in user gesture
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) {
+        throw new Error("Audio playback is not supported by your browser.");
+    }
+
+    const playbackContext = new AudioCtx({ sampleRate: 48000 });
+    if (playbackContext.state === "suspended") {
+        await playbackContext.resume();
+    }
+
+    // Silent buffer to fully unlock
+    const buf = playbackContext.createBuffer(1, 1, 48000);
+    const src = playbackContext.createBufferSource();
+    src.buffer = buf;
+    src.connect(playbackContext.destination);
+    src.start(0);
+
+    // 2. Request mic
+    if (!navigator.mediaDevices?.getUserMedia) {
+        const isInsecure =
+            window.location.protocol !== "https:" &&
+            window.location.hostname !== "localhost" &&
+            window.location.hostname !== "127.0.0.1";
+        if (isInsecure) {
+            const secErr = new DOMException("Microphone access requires HTTPS or localhost.", "SecurityError");
+            throw secErr;
+        }
+        throw new Error("Could not access microphone. Please try again.");
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+        },
+        video: false,
+    });
+
+    // Start muted
+    stream.getAudioTracks().forEach(t => {
+        t.enabled = false;
+    });
+
+    return { playbackContext, stream };
+}
+
+function parseMicError(err: unknown): string {
+    if (err instanceof DOMException) {
+        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+            return "Mic blocked. Click the microphone icon in your browser bar and allow access, then try again.";
+        }
+        if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+            return "No microphone found. Please connect one and try again.";
+        }
+        if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+            return "Mic is in use by another app. Close it and try again.";
+        }
+        if (err.name === "SecurityError") {
+            return "Microphone access requires HTTPS or localhost.";
+        }
+    }
+    if (err instanceof TypeError && typeof window !== "undefined") {
+        const isInsecure =
+            window.location.protocol !== "https:" &&
+            window.location.hostname !== "localhost" &&
+            window.location.hostname !== "127.0.0.1";
+        if (isInsecure) {
+            return "Microphone access requires HTTPS or localhost.";
+        }
+    }
+    if (err instanceof Error) {
+        if (err.message.includes("HTTPS") || err.message.includes("localhost")) {
+            return "Microphone access requires HTTPS or localhost.";
+        }
+    }
+    return "Could not access microphone. Please try again.";
+}
+
 export default function RoomLobby({ onJoined }: RoomLobbyProps) {
     const [view, setView] = useState<LobbyView>("landing");
 
     // Form inputs
     const [displayName, setDisplayName] = useState("");
     const [roomCode, setRoomCode] = useState("");
-    const [language, setLanguage] = useState("hi-IN");
+    const [spokenLanguage, setSpokenLanguage] = useState("hi-IN");
+    const [preferredLanguage, setPreferredLanguage] = useState("hi-IN");
 
     // "Your room is ready" state
     const [createdSession, setCreatedSession] = useState<RoomSession | null>(null);
     const [copiedCode, setCopiedCode] = useState(false);
 
+    // Pending session for Join retry
+    const [pendingJoinSession, setPendingJoinSession] = useState<RoomSession | null>(null);
+
     // Submission states
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const [micError, setMicError] = useState("");
+
+    function resetErrors() {
+        setError("");
+        setMicError("");
+    }
 
     async function handleCopyCode(code: string) {
         try {
@@ -62,7 +156,7 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
 
     async function handleCreateRoom(e: React.FormEvent) {
         e.preventDefault();
-        setError("");
+        resetErrors();
 
         const name = displayName.trim();
         if (!name) {
@@ -78,8 +172,8 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     displayName: name,
-                    spokenLanguage: language,
-                    preferredLanguage: language,
+                    spokenLanguage,
+                    preferredLanguage,
                 }),
             });
 
@@ -113,9 +207,35 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
         }
     }
 
+    async function handleEnterCreatedRoom() {
+        if (!createdSession) return;
+        setLoading(true);
+        setMicError("");
+
+        let playbackContext: AudioContext | null = null;
+        let stream: MediaStream | null = null;
+
+        try {
+            const res = await unlockAudioAndGetMic();
+            playbackContext = res.playbackContext;
+            stream = res.stream;
+            onJoined(createdSession, stream, playbackContext);
+        } catch (err) {
+            if (stream) {
+                stream.getTracks().forEach(t => t.stop());
+            }
+            if (playbackContext && playbackContext.state !== "closed") {
+                void playbackContext.close();
+            }
+            setMicError(parseMicError(err));
+        } finally {
+            setLoading(false);
+        }
+    }
+
     async function handleJoinRoom(e: React.FormEvent) {
         e.preventDefault();
-        setError("");
+        resetErrors();
 
         const name = displayName.trim();
         const code = roomCode.trim().toUpperCase();
@@ -131,48 +251,100 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
 
         setLoading(true);
 
+        let session = pendingJoinSession;
+
+        if (!session) {
+            try {
+                const response = await fetch(
+                    `${API_BASE_URL}/api/rooms/${encodeURIComponent(code)}/join`,
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            displayName: name,
+                            spokenLanguage,
+                            preferredLanguage,
+                        }),
+                    }
+                );
+
+                const data = await response.json();
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        throw new Error("Room not found. Check the code and try again.");
+                    } else if (response.status === 409 || data.error?.includes("full")) {
+                        throw new Error("This room is already full (max 5 participants).");
+                    }
+                    throw new Error(data.error || "Could not join room.");
+                }
+
+                const result = data as RoomApiResponse;
+                if (!result.self?.id || !result.participantToken) {
+                    throw new Error("Invalid room response from server.");
+                }
+
+                session = {
+                    roomCode: result.room.roomCode,
+                    participantId: result.self.id,
+                    participantToken: result.participantToken,
+                    displayName: result.self.displayName,
+                    spokenLanguage: result.self.spokenLanguage,
+                    preferredLanguage: result.self.preferredLanguage,
+                    isAdmin: result.self.isAdmin ?? false,
+                };
+                setPendingJoinSession(session);
+            } catch (err) {
+                setError(
+                    err instanceof Error ? err.message : "Failed to join room."
+                );
+                setLoading(false);
+                return;
+            }
+        }
+
+        // Inside user gesture — unlock AudioContext and request mic
+        let playbackContext: AudioContext | null = null;
+        let stream: MediaStream | null = null;
+
         try {
-            const response = await fetch(
-                `${API_BASE_URL}/api/rooms/${encodeURIComponent(code)}/join`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        displayName: name,
-                        spokenLanguage: language,
-                        preferredLanguage: language,
-                    }),
-                }
-            );
-
-            const data = await response.json();
-            if (!response.ok) {
-                if (response.status === 404) {
-                    throw new Error("Room not found. Check the code and try again.");
-                } else if (response.status === 409 || data.error?.includes("full")) {
-                    throw new Error("This room is already full (max 5 participants).");
-                }
-                throw new Error(data.error || "Could not join room.");
-            }
-
-            const result = data as RoomApiResponse;
-            if (!result.self?.id || !result.participantToken) {
-                throw new Error("Invalid room response from server.");
-            }
-
-            onJoined({
-                roomCode: result.room.roomCode,
-                participantId: result.self.id,
-                participantToken: result.participantToken,
-                displayName: result.self.displayName,
-                spokenLanguage: result.self.spokenLanguage,
-                preferredLanguage: result.self.preferredLanguage,
-                isAdmin: result.self.isAdmin ?? false,
-            });
+            const res = await unlockAudioAndGetMic();
+            playbackContext = res.playbackContext;
+            stream = res.stream;
+            onJoined(session, stream, playbackContext);
         } catch (err) {
-            setError(
-                err instanceof Error ? err.message : "Failed to join room."
-            );
+            if (stream) {
+                stream.getTracks().forEach(t => t.stop());
+            }
+            if (playbackContext && playbackContext.state !== "closed") {
+                void playbackContext.close();
+            }
+            setMicError(parseMicError(err));
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function handleRetryMicJoin() {
+        if (!pendingJoinSession) return;
+        setLoading(true);
+        setMicError("");
+
+        let playbackContext: AudioContext | null = null;
+        let stream: MediaStream | null = null;
+
+        try {
+            const res = await unlockAudioAndGetMic();
+            playbackContext = res.playbackContext;
+            stream = res.stream;
+            onJoined(pendingJoinSession, stream, playbackContext);
+        } catch (err) {
+            if (stream) {
+                stream.getTracks().forEach(t => t.stop());
+            }
+            if (playbackContext && playbackContext.state !== "closed") {
+                void playbackContext.close();
+            }
+            setMicError(parseMicError(err));
         } finally {
             setLoading(false);
         }
@@ -186,11 +358,8 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
 
         return (
             <main className="lobby-container">
-                <header className="lobby-topbar">
-                    <div className="brand lobby-brand">
-                        <span className="brand-indic">वाक्</span>
-                        <span className="brand-latin">VĀK</span>
-                    </div>
+                <header className="lobby-topbar" style={{ justifyContent: "center" }}>
+                    <Wordmark size="md" />
                 </header>
 
                 <div className="room-ready-card">
@@ -222,8 +391,8 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                             <span className="summary-value">{createdSession.displayName}</span>
                         </div>
                         <div className="ready-summary-row">
-                            <span className="summary-label">Language</span>
-                            <span className="summary-value">{spoken.nativeName} ({spoken.englishName})</span>
+                            <span className="summary-label">Speaking</span>
+                            <span className="summary-value">{spoken.nativeName}</span>
                         </div>
                     </div>
 
@@ -231,21 +400,33 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                         <button
                             type="button"
                             className="btn btn-primary btn-block btn-lg"
-                            onClick={() => onJoined(createdSession)}
+                            disabled={loading}
+                            onClick={() => void handleEnterCreatedRoom()}
                         >
-                            Enter room
+                            {loading ? "Setting up audio…" : (micError ? "Try again" : "Enter room")}
                         </button>
+
+                        {micError && (
+                            <div className="mic-error-banner" role="alert">
+                                <p>{micError}</p>
+                            </div>
+                        )}
+
                         <button
                             type="button"
                             className="btn btn-ghost btn-block"
+                            disabled={loading}
                             onClick={() => {
                                 setCreatedSession(null);
+                                resetErrors();
                                 setView("landing");
                             }}
                         >
                             Back to home
                         </button>
                     </div>
+
+                    <p className="lobby-footer-tip">Headphones recommended.</p>
                 </div>
             </main>
         );
@@ -263,15 +444,12 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                         className="btn-back"
                         onClick={() => {
                             setView("landing");
-                            setError("");
+                            resetErrors();
                         }}
                     >
                         ← Back
                     </button>
-                    <div className="brand lobby-brand">
-                        <span className="brand-indic">वाक्</span>
-                        <span className="brand-latin">VĀK</span>
-                    </div>
+                    <Wordmark size="md" />
                 </header>
 
                 <div className="lobby-card">
@@ -290,7 +468,10 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                                 type="text"
                                 className="form-input"
                                 value={displayName}
-                                onChange={e => setDisplayName(e.target.value)}
+                                onChange={e => {
+                                    setDisplayName(e.target.value);
+                                    if (error) setError("");
+                                }}
                                 placeholder="Enter your name"
                                 maxLength={24}
                                 required
@@ -299,29 +480,40 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                         </div>
 
                         <div className="form-group">
-                            <label htmlFor="createLanguage" className="form-label">
-                                Your language
-                            </label>
-                            <select
-                                id="createLanguage"
-                                className="form-select"
-                                value={language}
-                                onChange={e => setLanguage(e.target.value)}
-                            >
-                                {LANGUAGES.map(lang => (
-                                    <option key={lang.code} value={lang.code}>
-                                        {lang.nativeName} — {lang.englishName}
-                                    </option>
-                                ))}
-                            </select>
-                            <div className="form-hint" style={{ fontSize: "12px", color: "var(--text-muted, #94a3b8)", marginTop: "4px" }}>
-                                You will speak and hear others translated into this language.
-                            </div>
+                            <LanguagePicker
+                                id="create-spoken-language"
+                                label="I speak"
+                                value={spokenLanguage}
+                                onChange={code => {
+                                    setSpokenLanguage(code);
+                                    resetErrors();
+                                }}
+                                disabled={loading}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <LanguagePicker
+                                id="create-preferred-language"
+                                label="I want to hear"
+                                value={preferredLanguage}
+                                onChange={code => {
+                                    setPreferredLanguage(code);
+                                    resetErrors();
+                                }}
+                                disabled={loading}
+                            />
                         </div>
 
                         {error && (
                             <div className="lobby-error" role="alert">
                                 {error}
+                            </div>
+                        )}
+
+                        {micError && (
+                            <div className="mic-error-banner" role="alert">
+                                <p>{micError}</p>
                             </div>
                         )}
 
@@ -332,6 +524,8 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                         >
                             {loading ? "Creating room…" : "Create room"}
                         </button>
+
+                        <p className="lobby-footer-tip">Headphones recommended.</p>
                     </form>
                 </div>
             </main>
@@ -350,15 +544,12 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                         className="btn-back"
                         onClick={() => {
                             setView("landing");
-                            setError("");
+                            resetErrors();
                         }}
                     >
                         ← Back
                     </button>
-                    <div className="brand lobby-brand">
-                        <span className="brand-indic">वाक्</span>
-                        <span className="brand-latin">VĀK</span>
-                    </div>
+                    <Wordmark size="md" />
                 </header>
 
                 <div className="lobby-card">
@@ -377,9 +568,11 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                                 type="text"
                                 className="form-input form-input-code"
                                 value={roomCode}
-                                onChange={e =>
-                                    setRoomCode(e.target.value.toUpperCase())
-                                }
+                                onChange={e => {
+                                    setRoomCode(e.target.value.toUpperCase());
+                                    resetErrors();
+                                    setPendingJoinSession(null);
+                                }}
                                 placeholder="e.g. F5418A"
                                 maxLength={6}
                                 required
@@ -396,7 +589,11 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                                 type="text"
                                 className="form-input"
                                 value={displayName}
-                                onChange={e => setDisplayName(e.target.value)}
+                                onChange={e => {
+                                    setDisplayName(e.target.value);
+                                    resetErrors();
+                                    setPendingJoinSession(null);
+                                }}
                                 placeholder="Enter your name"
                                 maxLength={24}
                                 required
@@ -404,24 +601,31 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                         </div>
 
                         <div className="form-group">
-                            <label htmlFor="joinLanguage" className="form-label">
-                                Your language
-                            </label>
-                            <select
-                                id="joinLanguage"
-                                className="form-select"
-                                value={language}
-                                onChange={e => setLanguage(e.target.value)}
-                            >
-                                {LANGUAGES.map(lang => (
-                                    <option key={lang.code} value={lang.code}>
-                                        {lang.nativeName} — {lang.englishName}
-                                    </option>
-                                ))}
-                            </select>
-                            <div className="form-hint" style={{ fontSize: "12px", color: "var(--text-muted, #94a3b8)", marginTop: "4px" }}>
-                                You will speak and hear others translated into this language.
-                            </div>
+                            <LanguagePicker
+                                id="join-spoken-language"
+                                label="I speak"
+                                value={spokenLanguage}
+                                onChange={code => {
+                                    setSpokenLanguage(code);
+                                    resetErrors();
+                                    setPendingJoinSession(null);
+                                }}
+                                disabled={loading}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <LanguagePicker
+                                id="join-preferred-language"
+                                label="I want to hear"
+                                value={preferredLanguage}
+                                onChange={code => {
+                                    setPreferredLanguage(code);
+                                    resetErrors();
+                                    setPendingJoinSession(null);
+                                }}
+                                disabled={loading}
+                            />
                         </div>
 
                         {error && (
@@ -430,13 +634,32 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                             </div>
                         )}
 
-                        <button
-                            type="submit"
-                            className="btn btn-primary btn-block btn-lg"
-                            disabled={loading}
-                        >
-                            {loading ? "Joining room…" : "Join conversation"}
-                        </button>
+                        {micError && (
+                            <div className="mic-error-banner" role="alert">
+                                <p>{micError}</p>
+                            </div>
+                        )}
+
+                        {micError && pendingJoinSession ? (
+                            <button
+                                type="button"
+                                className="btn btn-primary btn-block btn-lg"
+                                disabled={loading}
+                                onClick={() => void handleRetryMicJoin()}
+                            >
+                                {loading ? "Connecting…" : "Try again"}
+                            </button>
+                        ) : (
+                            <button
+                                type="submit"
+                                className="btn btn-primary btn-block btn-lg"
+                                disabled={loading}
+                            >
+                                {loading ? "Joining room…" : "Join conversation"}
+                            </button>
+                        )}
+
+                        <p className="lobby-footer-tip">Headphones recommended.</p>
                     </form>
                 </div>
             </main>
@@ -444,46 +667,180 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
     }
 
     // ==================================================
-    // RENDER: LANDING SCREEN (HERO + 3-STEP STRIP)
+    // RENDER: REDESIGNED LANDING VIEW
     // ==================================================
     return (
-        <main className="lobby-container">
-            <header className="lobby-topbar">
-                <div className="brand lobby-brand">
-                    <span className="brand-indic">वाक्</span>
-                    <span className="brand-latin">VĀK</span>
+        <main className="landing">
+            <nav className="landing-nav">
+                <Wordmark size="md" />
+                <div className="nav-actions">
+                    <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => {
+                            setView("join");
+                            resetErrors();
+                        }}
+                    >
+                        Join a room
+                    </button>
+                    <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => {
+                            setView("create");
+                            resetErrors();
+                        }}
+                    >
+                        Create a room
+                    </button>
                 </div>
-            </header>
+            </nav>
 
             <section className="landing-hero">
-                <h1 className="landing-headline">
+                <h1>
                     Speak your language.
                     <br />
                     Hear theirs.
                 </h1>
-
-                <p className="landing-subhead">
+                <p className="hero-sub">
                     Real-time conversations across Indian languages.
                 </p>
-
-                <div className="landing-actions">
+                <div className="hero-ctas">
                     <button
                         type="button"
                         className="btn btn-primary btn-lg"
                         onClick={() => {
                             setView("create");
-                            setError("");
+                            resetErrors();
                         }}
                     >
                         Create a room
                     </button>
-
                     <button
                         type="button"
-                        className="btn btn-secondary btn-lg"
+                        className="btn btn-ghost btn-lg"
                         onClick={() => {
                             setView("join");
-                            setError("");
+                            resetErrors();
+                        }}
+                    >
+                        Join a room
+                    </button>
+                </div>
+
+                {/* Translation moment card — pure HTML/CSS visual */}
+                <div className="hero-card">
+                    <div className="hero-card-inner">
+                        {/* Speaker tile */}
+                        <div className="card-speaker-tile">
+                            <div className="card-avatar speaking-ring" aria-hidden="true">
+                                प
+                            </div>
+                            <div className="card-speaker-info">
+                                <span className="card-speaker-name">Priya</span>
+                                <span className="card-lang-chip">
+                                    हिन्दी <span className="lang-en-sm">Hindi</span>
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* The original phrase */}
+                        <p className="card-phrase-original">कल कॉलेज आ रहे हो?</p>
+
+                        {/* Translation states */}
+                        <div className="card-translations">
+                            <div className="card-trans-row">
+                                <span className="card-lang-chip-sm">
+                                    தமிழ் <span className="lang-en-sm">Tamil</span>
+                                </span>
+                                <span className="card-trans-text">
+                                    [NEEDS_REVIEW: Tamil translation]
+                                </span>
+                            </div>
+                            <div className="card-trans-row">
+                                <span className="card-lang-chip-sm">
+                                    ಕನ್ನಡ <span className="lang-en-sm">Kannada</span>
+                                </span>
+                                <span className="card-trans-text">
+                                    [NEEDS_REVIEW: Kannada translation]
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Playing indicator */}
+                        <div className="card-playing-pill">
+                            <span className="playing-dot" aria-hidden="true" />
+                            Playing translation
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section className="how-it-works">
+                <div className="steps-grid">
+                    <div className="step">
+                        <span className="step-num">01</span>
+                        <strong>Speak naturally</strong>
+                        <span>Talk in your mother tongue with zero mode-switching.</span>
+                    </div>
+                    <div className="step">
+                        <span className="step-num">02</span>
+                        <strong>Vāk translates</strong>
+                        <span>Neural pipeline translates and synthesizes.</span>
+                    </div>
+                    <div className="step">
+                        <span className="step-num">03</span>
+                        <strong>They hear theirs</strong>
+                        <span>Each listener receives audio in their language.</span>
+                    </div>
+                </div>
+            </section>
+
+            <section className="languages-section">
+                <div className="languages-grid">
+                    {LANGUAGES.map(l => (
+                        <span key={l.code} className="lang-chip">
+                            {l.nativeName} <span className="lang-chip-en">{l.englishName}</span>
+                        </span>
+                    ))}
+                </div>
+            </section>
+
+            <section className="pipeline-section">
+                <div className="pipeline-row">
+                    <span className="pipe-step">🎙 Speech</span>
+                    <span className="pipe-arrow" aria-hidden="true">→</span>
+                    <span className="pipe-step">📝 Text (Prisma STT)</span>
+                    <span className="pipe-arrow" aria-hidden="true">→</span>
+                    <span className="pipe-step">🌐 Translation</span>
+                    <span className="pipe-arrow" aria-hidden="true">→</span>
+                    <span className="pipe-step">🔊 Speech (Timbre TTS)</span>
+                </div>
+                <p className="pipeline-note">
+                    Speech recognition, translation, and voice synthesis happen in real time.
+                </p>
+            </section>
+
+            <section className="cta-band">
+                <h2>Ready to try?</h2>
+                <div>
+                    <button
+                        type="button"
+                        className="btn btn-primary btn-lg"
+                        onClick={() => {
+                            setView("create");
+                            resetErrors();
+                        }}
+                    >
+                        Create a room
+                    </button>
+                    <button
+                        type="button"
+                        className="btn btn-ghost btn-lg"
+                        onClick={() => {
+                            setView("join");
+                            resetErrors();
                         }}
                     >
                         Join a room
@@ -491,42 +848,10 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                 </div>
             </section>
 
-            {/* MINIMAL 3-STEP STRIP BELOW */}
-            <section className="landing-steps-strip">
-                <div className="landing-step">
-                    <span className="step-num">01</span>
-                    <div className="step-body">
-                        <strong className="step-title">Speak naturally</strong>
-                        <span className="step-text">
-                            Talk in your own mother tongue with zero mode-switching.
-                        </span>
-                    </div>
-                </div>
-
-                <div className="landing-step-arrow">→</div>
-
-                <div className="landing-step">
-                    <span className="step-num">02</span>
-                    <div className="step-body">
-                        <strong className="step-title">Vāk translates</strong>
-                        <span className="step-text">
-                            Real-time neural pipeline translates and synthesizes speech.
-                        </span>
-                    </div>
-                </div>
-
-                <div className="landing-step-arrow">→</div>
-
-                <div className="landing-step">
-                    <span className="step-num">03</span>
-                    <div className="step-body">
-                        <strong className="step-title">They hear theirs</strong>
-                        <span className="step-text">
-                            Each listener receives spoken audio in their chosen language.
-                        </span>
-                    </div>
-                </div>
-            </section>
+            <footer className="landing-footer">
+                <Wordmark size="sm" />
+                <span className="footer-copy">© 2025 Vāk</span>
+            </footer>
         </main>
     );
 }
