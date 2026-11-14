@@ -429,6 +429,20 @@ export default function RoomPresence({
             }
 
             micStreamRef.current = stream;
+            // Activate microphone only after STT is ready.
+            const audioTracks = stream.getAudioTracks();
+
+            if (audioTracks.length === 0) {
+                    throw new Error("No microphone audio track available.");
+                }
+
+            audioTracks.forEach(track => {
+                    if (track.readyState !== "live") {
+                        throw new Error("Microphone track is no longer live.");
+                    }
+
+                    track.enabled = true;
+                });
 
             // 2. Create 16 kHz audio context.
             const context = new AudioContext({
@@ -592,12 +606,19 @@ export default function RoomPresence({
         setIsMuted(nextMuted);
 
         if (nextMuted) {
-            audioReadyRef.current = false;
-        } else {
-            if (!audioReadyRef.current) {
-                void startAudioSession();
-            }
-        }
+    audioReadyRef.current = false;
+
+    micStreamRef.current
+        ?.getAudioTracks()
+        .forEach(track => {
+            track.enabled = false;
+        });
+
+} else {
+    if (!audioReadyRef.current) {
+        void startAudioSession();
+    }
+}
 
         socket.send(JSON.stringify({
             type: "set_mute",
