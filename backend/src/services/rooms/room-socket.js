@@ -4,6 +4,7 @@ import { enqueueRoomSpeechTurn } from "./room-voice-router.js";
 import {
     authenticateParticipant,
     getRoom,
+    getRoomRecord,
     getRoomParticipantRecords,
     getParticipantRecord,
     setParticipantConnection,
@@ -12,8 +13,28 @@ import {
     RoomError,
 } from "./room-manager.js";
 
-const WEB_ORIGIN =
-    process.env.WEB_ORIGIN || "http://localhost:5173";
+// Allow WebSocket connections from localhost and RFC-1918 private network
+// addresses on any port. The room WebSocket is already protected by per-
+// participant cryptographic tokens, so origin is a secondary defence only.
+function isAllowedOrigin(origin) {
+    if (!origin) return true; // non-browser clients (curl, ws CLI) have no Origin
+
+    try {
+        const { hostname } = new URL(origin);
+        return (
+            hostname === "localhost" ||
+            hostname === "127.0.0.1" ||
+            // RFC-1918: 10.x.x.x
+            /^10\./.test(hostname) ||
+            // RFC-1918: 172.16–31.x.x
+            /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+            // RFC-1918: 192.168.x.x
+            /^192\.168\./.test(hostname)
+        );
+    } catch {
+        return false;
+    }
+}
 
 const PRISMA_ENDPOINT =
     "wss://api.vachana.ai/stt/v3/stream";
@@ -27,7 +48,7 @@ function sendJson(socket, message) {
     }
 }
 
-function broadcastRoomMessage(roomCode, message) {
+export function broadcastRoomMessage(roomCode, message) {
     for (const participant of getRoomParticipantRecords(roomCode)) {
         sendJson(participant.socket, message);
     }
@@ -63,7 +84,8 @@ export function attachRoomSocket(server) {
 
         const origin = request.headers.origin;
 
-        if (origin && origin !== WEB_ORIGIN) {
+        if (!isAllowedOrigin(origin)) {
+            console.warn(`[ROOM] WebSocket rejected from origin: ${origin}`);
             socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
             socket.destroy();
             return;
@@ -84,6 +106,7 @@ export function attachRoomSocket(server) {
         let sttReady = false;
         let stoppingStt = false;
         let stopTimer = null;
+        const processedUtterances = new Set();
 
         const authTimer = setTimeout(() => {
             sendJson(client, {
@@ -179,26 +202,37 @@ export function attachRoomSocket(server) {
             }
 
             if (participant.isMuted) {
-                sendJson(client, {
-                    type: "error",
-                    message: "Unmute before starting speech recognition",
+                updateParticipant({
+                    roomCode,
+                    participantId,
+                    token: participantToken,
+                    changes: { isMuted: false },
                 });
-                return;
+                sendJson(client, {
+                    type: "mute_updated",
+                    isMuted: false,
+                });
+                broadcastRoomMessage(roomCode, {
+                    type: "room_updated",
+                    room: getRoom(roomCode),
+                });
             }
 
             if (sttSocket) {
-                if (sttReady) {
+                if (stoppingStt) {
+                    finishSttSession("restart_for_unmute");
+                } else if (sttReady) {
                     sendJson(client, {
                         type: "stt_ready",
                         message: "Speech recognition is already active",
                     });
+                    return;
                 } else {
                     sendJson(client, {
                         type: "stt_connecting",
                     });
+                    return;
                 }
-
-                return;
             }
 
             if (!process.env.GNANI_API_KEY_ID) {
@@ -273,6 +307,36 @@ export function attachRoomSocket(server) {
                     event.type === "transcript" &&
                     event.is_final
                 ) {
+                    const text = typeof event.text === "string" ? event.text.trim() : "";
+                    if (!text) {
+                        return;
+                    }
+
+                    const utteranceKey = event.utterance_id
+                        ? `u:${event.utterance_id}`
+                        : event.segment_id
+                            ? `s:${event.segment_id}`
+                            : null;
+
+                    if (utteranceKey && processedUtterances.has(utteranceKey)) {
+                        console.log(
+                            `[ROOM STT] Deduplicated final transcript for ${participantId} (${utteranceKey})`
+                        );
+                        return;
+                    }
+
+                    if (utteranceKey) {
+                        processedUtterances.add(utteranceKey);
+                        if (processedUtterances.size > 200) {
+                            const oldest = processedUtterances.values().next().value;
+                            processedUtterances.delete(oldest);
+                        }
+                    }
+
+                    console.log(
+                        `[ROOM STT] Speaker ${participantId} utterance ${utteranceKey}: "${text}"`
+                    );
+
                     const speaker = publicSpeaker(
                         roomCode,
                         participantId
@@ -598,8 +662,90 @@ export function attachRoomSocket(server) {
                     // Muting also stops the paid STT session.
                     if (control.isMuted) {
                         requestStopStt();
+                    } else if (stoppingStt) {
+                        finishSttSession("unmuted_restart");
                     }
 
+                } catch (error) {
+                    sendJson(client, {
+                        type: "error",
+                        message: error.message,
+                    });
+                }
+
+                return;
+            }
+
+            if (control.type === "remove_participant") {
+                const room = getRoomRecord(roomCode);
+                if (!room) {
+                    sendJson(client, {
+                        type: "error",
+                        message: "Room not found",
+                    });
+                    return;
+                }
+
+                if (room.adminParticipantId !== participantId) {
+                    sendJson(client, {
+                        type: "error",
+                        message: "Only the room admin can remove participants",
+                    });
+                    return;
+                }
+
+                const targetId = control.targetParticipantId;
+                if (!targetId || targetId === participantId) {
+                    sendJson(client, {
+                        type: "error",
+                        message: "Cannot remove this participant",
+                    });
+                    return;
+                }
+
+                const target = room.participants.get(targetId);
+                if (!target) {
+                    sendJson(client, {
+                        type: "error",
+                        message: "Participant not found",
+                    });
+                    return;
+                }
+
+                // If target has an STT session, close it
+                if (target.sttSocket) {
+                    try {
+                        target.sttSocket.close(1000, "removed_by_admin");
+                    } catch {}
+                    target.sttSocket = null;
+                }
+
+                // If target is connected, notify and disconnect
+                if (target.socket) {
+                    sendJson(target.socket, {
+                        type: "removed_from_room",
+                        reason: "You were removed from the room by the admin",
+                    });
+                    try {
+                        target.socket.close(1000, "Removed by admin");
+                    } catch {}
+                }
+
+                try {
+                    leaveParticipant({
+                        roomCode,
+                        participantId: targetId,
+                        bypassTokenCheck: true,
+                    });
+
+                    broadcastRoomMessage(roomCode, {
+                        type: "room_updated",
+                        room: getRoom(roomCode),
+                    });
+
+                    console.log(
+                        `[ROOM] Admin ${participantId} removed participant ${targetId} from ${roomCode}`
+                    );
                 } catch (error) {
                     sendJson(client, {
                         type: "error",

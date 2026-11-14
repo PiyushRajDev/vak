@@ -2,9 +2,17 @@ import express from "express";
 import cors from "cors";
 import roomRoutes from "./routes/rooms.js";
 const app = express();
+app.use((req, res, next) => {
+    console.log(
+        `[REQUEST] ${req.method} ${req.originalUrl}`,
+        `Origin: ${req.headers.origin}`
+    );
+    next();
+});
 
 app.use(cors({
-    origin: "http://localhost:5173"
+    origin: true,
+    credentials: true
 }));
 
 app.use(express.json());

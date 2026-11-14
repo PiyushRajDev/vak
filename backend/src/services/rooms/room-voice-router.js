@@ -99,8 +99,9 @@ async function processRoomTurn({
         return;
     }
 
-    // Never send a speaker their own generated speech.
-    const recipients = [...room.participants.values()].filter(
+    // In a multi-party conversation, never send a speaker their own generated speech.
+    // If the speaker is currently alone in the room, allow self-routing so solo testing works.
+    let recipients = [...room.participants.values()].filter(
         participant =>
             participant.id !== speakerId &&
             participant.connected &&
@@ -108,10 +109,23 @@ async function processRoomTurn({
     );
 
     if (recipients.length === 0) {
-        console.log(
-            `[ROOM VOICE] No connected listeners for ${speaker.displayName}`
+        // Only allow solo self-routing if there are NO other participants registered in the room at all.
+        // If other participants exist (even if temporarily disconnected or reconnecting), never loop back to speaker.
+        const otherParticipants = [...room.participants.values()].filter(
+            participant => participant.id !== speakerId
         );
-        return;
+
+        if (otherParticipants.length === 0 && speaker.connected && speaker.socket?.readyState === WebSocket.OPEN) {
+            recipients = [speaker];
+            console.log(
+                `[ROOM VOICE] ${speaker.displayName} is solo in ${roomCode}; routing self-translation`
+            );
+        } else {
+            console.log(
+                `[ROOM VOICE] No connected listeners for ${speaker.displayName}`
+            );
+            return;
+        }
     }
 
     // Group listeners by target language and voice.
@@ -183,6 +197,7 @@ async function processRoomTurn({
                 sourceLanguage,
                 targetLanguage,
                 voice: group.voice,
+                utteranceId: transcript.utterance_id || transcript.segment_id,
 
                 onEvent: event => {
                     emitToGroup(event);
@@ -191,11 +206,25 @@ async function processRoomTurn({
                 onAudioChunk: async (audio, info) => {
                     chunkCount++;
 
+                    // Quick non-cryptographic fingerprint of first 64 bytes.
+                    // Logged on the SEND boundary (TRACE 2) so it can be
+                    // correlated with TTS generation (TRACE 1) and frontend
+                    // receive / playback (TRACE 3, TRACE 4).
+                    let pHash = 0;
+                    for (let i = 0; i < Math.min(audio.length, 64); i++) {
+                        pHash = (pHash * 31 + audio[i]) >>> 0;
+                    }
+                    const payloadHash = pHash.toString(16);
+
+                    const chunkDurationSeconds = audio.length / (48000 * 2);
+
                     const metadata = {
                         type: "room_audio_chunk",
                         version: 1,
                         roomCode,
                         turnId,
+                        utteranceId: transcript.utterance_id || transcript.segment_id,
+                        generationId: info.requestId || null,
                         speakerId,
                         speakerName: speakerInfo.displayName,
                         targetLanguage,
@@ -207,6 +236,23 @@ async function processRoomTurn({
                         channels: 1,
                         encoding: "pcm_s16le",
                     };
+
+                    if (process.env.VAK_TTS_TRACE === "1") {
+                        console.log(JSON.stringify({
+                            t: "TTS_TRACE",
+                            event: "chunkSent",
+                            turnId,
+                            utteranceId: metadata.utteranceId,
+                            generationId: metadata.generationId,
+                            chunkIndex: info.chunkNumber,
+                            providerChunkIndex: info.providerChunkIndex,
+                            payloadHash,
+                            chunkDurationSeconds: Number(chunkDurationSeconds.toFixed(4)),
+                            audioBytes: audio.length,
+                            recipientCount: group.participantIds.length,
+                            ts: Date.now(),
+                        }));
+                    }
 
                     for (const recipientId of group.participantIds) {
                         const recipient = getLiveRecipient(
@@ -258,15 +304,16 @@ async function processRoomTurn({
     await Promise.all(tasks);
 }
 
-// Serialize complete speech turns per room. Different speakers' STT
-// sessions remain concurrent; their generated audio turns are queued.
+// Serialize speech turns per speaker so an individual speaker's turns
+// play in order, while allowing different speakers to communicate concurrently.
 export function enqueueRoomSpeechTurn({
     roomCode,
     speakerId,
     transcript,
 }) {
+    const queueKey = `${roomCode}:${speakerId}`;
     const previous =
-        roomQueues.get(roomCode) || Promise.resolve();
+        roomQueues.get(queueKey) || Promise.resolve();
 
     const current = previous
         .catch(() => {})
@@ -279,16 +326,16 @@ export function enqueueRoomSpeechTurn({
         )
         .catch(error => {
             console.error(
-                `[ROOM VOICE] Turn processing failed in ${roomCode}:`,
+                `[ROOM VOICE] Turn processing failed in ${roomCode} for ${speakerId}:`,
                 error.message
             );
         });
 
-    roomQueues.set(roomCode, current);
+    roomQueues.set(queueKey, current);
 
     void current.finally(() => {
-        if (roomQueues.get(roomCode) === current) {
-            roomQueues.delete(roomCode);
+        if (roomQueues.get(queueKey) === current) {
+            roomQueues.delete(queueKey);
         }
     });
 

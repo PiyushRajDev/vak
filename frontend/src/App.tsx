@@ -4,6 +4,7 @@ import "./App.css";
 import ReadyGate from "./components/ReadyGate";
 import RoomLobby from "./components/RoomLobby";
 import RoomPresence from "./components/RoomPresence";
+import { LANGUAGES } from "./languages";
 
 type Transcript = {
     text: string;
@@ -28,20 +29,8 @@ type RoomSession = {
     displayName: string;
     spokenLanguage: string;
     preferredLanguage: string;
+    isAdmin?: boolean;
 };
-
-const LANGUAGES = [
-    { code: "en-IN", name: "English (India)" },
-    { code: "hi-IN", name: "Hindi" },
-    { code: "bn-IN", name: "Bengali" },
-    { code: "gu-IN", name: "Gujarati" },
-    { code: "kn-IN", name: "Kannada" },
-    { code: "ml-IN", name: "Malayalam" },
-    { code: "mr-IN", name: "Marathi" },
-    { code: "pa-IN", name: "Punjabi" },
-    { code: "ta-IN", name: "Tamil" },
-    { code: "te-IN", name: "Telugu" },
-];
 
 function SingleUserDemo() {
     // Keep your existing source-language default.
@@ -72,10 +61,15 @@ function SingleUserDemo() {
 
     // Convert each incoming PCM chunk into scheduled browser audio.
     const playPcmChunk = (data: ArrayBuffer) => {
-        const context = playbackContextRef.current;
+        let context = playbackContextRef.current;
 
-        if (!context) {
-            throw new Error("Audio playback context is unavailable");
+        if (!context || context.state === "closed") {
+            context = new AudioContext({ sampleRate: 48000 });
+            playbackContextRef.current = context;
+        }
+
+        if (context.state === "suspended") {
+            void context.resume();
         }
 
         if (data.byteLength === 0 || data.byteLength % 2 !== 0) {
@@ -103,10 +97,12 @@ function SingleUserDemo() {
         source.connect(context.destination);
 
         // Schedule chunks sequentially to avoid overlapping audio.
-        const startAt = Math.max(
-            nextPlaybackTimeRef.current,
-            context.currentTime + 0.08
-        );
+        const now = context.currentTime;
+        let startAt = nextPlaybackTimeRef.current;
+
+        if (startAt <= now || startAt > now + 30.0) {
+            startAt = now + 0.04;
+        }
 
         source.start(startAt);
 
@@ -279,6 +275,21 @@ function SingleUserDemo() {
                         );
                     }
 
+                    return;
+                }
+
+                if (typeof Blob !== "undefined" && event.data instanceof Blob) {
+                    event.data.arrayBuffer().then(buffer => {
+                        try {
+                            playPcmChunk(buffer);
+                        } catch (err) {
+                            setError(
+                                err instanceof Error
+                                    ? err.message
+                                    : "Audio playback failed"
+                            );
+                        }
+                    }).catch(console.error);
                     return;
                 }
 
@@ -509,7 +520,7 @@ function SingleUserDemo() {
                 >
                     {LANGUAGES.map(item => (
                         <option key={item.code} value={item.code}>
-                            {item.name}
+                            {item.nativeName} — {item.englishName}
                         </option>
                     ))}
                 </select>
@@ -526,7 +537,7 @@ function SingleUserDemo() {
                 >
                     {LANGUAGES.map(item => (
                         <option key={item.code} value={item.code}>
-                            {item.name}
+                            {item.nativeName} — {item.englishName}
                         </option>
                     ))}
                 </select>
@@ -625,7 +636,7 @@ function SingleUserDemo() {
 }
 
 const API_BASE_URL =
-    import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+    import.meta.env.VITE_API_BASE_URL ?? "";
 
 function App() {
     const [roomSession, setRoomSession] =

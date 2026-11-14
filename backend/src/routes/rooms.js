@@ -6,21 +6,25 @@ import {
     createRoom,
     joinRoom,
     getRoom,
+    getRoomRecord,
     updateParticipant,
     leaveParticipant,
+    verifyToken,
     RoomError,
 } from "../services/rooms/room-manager.js";
+import { broadcastRoomMessage } from "../services/rooms/room-socket.js";
 
 const router = Router();
 
 const supportedLanguages = [
-    "en-IN",
-    "hi-IN",
     "bn-IN",
+    "en-IN",
     "gu-IN",
+    "hi-IN",
     "kn-IN",
     "ml-IN",
     "mr-IN",
+    "od-IN",
     "pa-IN",
     "ta-IN",
     "te-IN",
@@ -131,14 +135,63 @@ router.patch("/:roomCode/participants/:participantId", (req, res) => {
     }
 });
 
-// Leave a room.
+// Leave or remove a participant from a room.
 router.delete("/:roomCode/participants/:participantId", (req, res) => {
     try {
+        const token = req.headers["x-participant-token"];
+        const room = getRoomRecord(req.params.roomCode);
+
+        if (!room) {
+            return res.status(404).json({ error: "Room not found" });
+        }
+
+        const targetId = req.params.participantId;
+        const target = room.participants.get(targetId);
+
+        if (!target) {
+            return res.status(404).json({ error: "Participant not found" });
+        }
+
+        const callerIsSelf = verifyToken(token, target.token);
+        const adminParticipant = room.participants.get(room.adminParticipantId);
+        const callerIsAdmin = adminParticipant && verifyToken(token, adminParticipant.token);
+
+        if (!callerIsSelf && !callerIsAdmin) {
+            return res.status(403).json({ error: "Unauthorized" });
+        }
+
+        // If removed by admin, notify target and clean up their connections
+        if (!callerIsSelf && callerIsAdmin) {
+            if (target.sttSocket) {
+                try {
+                    target.sttSocket.close(1000, "removed_by_admin");
+                } catch {}
+                target.sttSocket = null;
+            }
+
+            if (target.socket) {
+                try {
+                    target.socket.send(JSON.stringify({
+                        type: "removed_from_room",
+                        reason: "You were removed from the room by the admin",
+                    }));
+                    target.socket.close(1000, "Removed by admin");
+                } catch {}
+            }
+        }
+
         const result = leaveParticipant({
             roomCode: req.params.roomCode,
-            participantId: req.params.participantId,
-            token: req.headers["x-participant-token"],
+            participantId: targetId,
+            bypassTokenCheck: true,
         });
+
+        if (!result.roomDeleted) {
+            broadcastRoomMessage(req.params.roomCode, {
+                type: "room_updated",
+                room: getRoom(req.params.roomCode),
+            });
+        }
 
         return res.json(result);
     } catch (error) {

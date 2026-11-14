@@ -6,7 +6,7 @@ import {
 } from "node:crypto";
 
 const rooms = new Map();
-const MAX_PARTICIPANTS = 3;
+const MAX_PARTICIPANTS = 5;
 
 export class RoomError extends Error {
     constructor(message, statusCode = 400) {
@@ -28,7 +28,7 @@ function generateParticipantToken() {
     return randomBytes(32).toString("base64url");
 }
 
-function verifyToken(candidate, stored) {
+export function verifyToken(candidate, stored) {
     if (typeof candidate !== "string" || !stored) {
         return false;
     }
@@ -65,7 +65,7 @@ export function authenticateParticipant({
 }
 
 
-function publicParticipant(participant) {
+function publicParticipant(participant, adminParticipantId) {
     return {
         id: participant.id,
         displayName: participant.displayName,
@@ -75,6 +75,7 @@ function publicParticipant(participant) {
         isMuted: participant.isMuted,
         connected: participant.connected,
         joinedAt: participant.joinedAt,
+        isAdmin: participant.isAdmin || participant.id === adminParticipantId || false,
     };
 }
 
@@ -84,8 +85,9 @@ function roomSnapshot(room) {
         status: room.status,
         createdAt: room.createdAt,
         maxParticipants: MAX_PARTICIPANTS,
+        adminParticipantId: room.adminParticipantId || null,
         participants: [...room.participants.values()]
-            .map(publicParticipant),
+            .map(p => publicParticipant(p, room.adminParticipantId)),
     };
 }
 
@@ -97,7 +99,7 @@ function updateRoomStatus(room) {
     room.status = hasConnectedParticipant ? "active" : "waiting";
 }
 
-function createParticipant(data) {
+function createParticipant(data, isAdmin = false) {
     return {
         id: randomUUID(),
         token: generateParticipantToken(),
@@ -107,8 +109,9 @@ function createParticipant(data) {
         preferredLanguage: data.preferredLanguage,
 
         voiceId: process.env.GNANI_TTS_VOICE || "Devansh",
-        isMuted: false,
+        isMuted: true,
         connected: false,
+        isAdmin,
 
         // The WebSocket reference will be attached in M8.
         socket: null,
@@ -121,7 +124,7 @@ function createParticipant(data) {
 function joinResult(room, participant) {
     return {
         room: roomSnapshot(room),
-        self: publicParticipant(participant),
+        self: publicParticipant(participant, room.adminParticipantId),
         participantToken: participant.token,
     };
 }
@@ -133,14 +136,15 @@ export function createRoom(data) {
         roomCode = generateRoomCode();
     } while (rooms.has(roomCode));
 
+    const participant = createParticipant(data, true);
+
     const room = {
         roomCode,
         status: "waiting",
         createdAt: new Date().toISOString(),
+        adminParticipantId: participant.id,
         participants: new Map(),
     };
-
-    const participant = createParticipant(data);
 
     room.participants.set(participant.id, participant);
     rooms.set(roomCode, room);
@@ -160,7 +164,7 @@ export function joinRoom(code, data) {
         throw new RoomError("Room is full", 409);
     }
 
-    const participant = createParticipant(data);
+    const participant = createParticipant(data, false);
 
     room.participants.set(participant.id, participant);
 
@@ -223,7 +227,7 @@ export function updateParticipant({
 
     return {
         room: roomSnapshot(room),
-        self: publicParticipant(participant),
+        self: publicParticipant(participant, room.adminParticipantId),
     };
 }
 
@@ -231,6 +235,7 @@ export function leaveParticipant({
     roomCode,
     participantId,
     token,
+    bypassTokenCheck = false,
 }) {
     const normalizedCode = normalizeRoomCode(roomCode);
     const room = rooms.get(normalizedCode);
@@ -245,7 +250,7 @@ export function leaveParticipant({
         throw new RoomError("Participant not found", 404);
     }
 
-    if (!verifyToken(token, participant.token)) {
+    if (!bypassTokenCheck && !verifyToken(token, participant.token)) {
         throw new RoomError("Invalid participant token", 403);
     }
 
@@ -258,6 +263,15 @@ export function leaveParticipant({
             roomDeleted: true,
             roomCode: normalizedCode,
         };
+    }
+
+    // If the admin leaves, assign the next participant as admin
+    if (room.adminParticipantId === participantId) {
+        const nextParticipant = room.participants.values().next().value;
+        if (nextParticipant) {
+            room.adminParticipantId = nextParticipant.id;
+            nextParticipant.isAdmin = true;
+        }
     }
 
     updateRoomStatus(room);

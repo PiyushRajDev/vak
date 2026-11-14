@@ -7,18 +7,23 @@ export type ParticipantTileInfo = {
     preferredLanguage?: string;
     connected?: boolean;
     isMuted?: boolean;
+    isAdmin?: boolean;
 };
 
 type ParticipantTilesProps = {
     participants: ParticipantTileInfo[];
     selfParticipantId: string;
     activeSpeakerId: string | null;
+    isSelfAdmin?: boolean;
+    onRemoveParticipant?: (id: string) => void;
 };
 
 export default function ParticipantTiles({
     participants,
     selfParticipantId,
     activeSpeakerId,
+    isSelfAdmin = false,
+    onRemoveParticipant,
 }: ParticipantTilesProps) {
     if (participants.length === 0) {
         return null;
@@ -64,12 +69,42 @@ export default function ParticipantTiles({
                                         {p.displayName}
                                     </span>
                                     {isSelf && <span className="tile-you-pill">You</span>}
+                                    {p.isAdmin && <span className="tile-host-pill">Host</span>}
                                 </div>
 
                                 <span className="tile-spoken-native" title={spokenLang.englishName}>
                                     {spokenLang.nativeName}
                                 </span>
                             </div>
+
+                            {isSelfAdmin && !isSelf && onRemoveParticipant && (
+                                <button
+                                    type="button"
+                                    className="btn-remove-participant"
+                                    title={`Remove ${p.displayName} from room`}
+                                    aria-label={`Remove ${p.displayName} from room`}
+                                    onClick={() => {
+                                        if (window.confirm(`Remove ${p.displayName} from the room?`)) {
+                                            onRemoveParticipant(p.id);
+                                        }
+                                    }}
+                                >
+                                    <svg
+                                        width="14"
+                                        height="14"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        aria-hidden="true"
+                                    >
+                                        <line x1="18" y1="6" x2="6" y2="18" />
+                                        <line x1="6" y1="6" x2="18" y2="18" />
+                                    </svg>
+                                </button>
+                            )}
                         </div>
                     );
                 })}

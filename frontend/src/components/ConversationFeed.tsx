@@ -127,7 +127,12 @@ export default function ConversationFeed({
                                         <p className="message-primary-text">
                                             {msg.originalText}
                                         </p>
-                                        {targetLangsSummary && (
+                                        {msg.translatedText && (
+                                            <p className="message-secondary-text">
+                                                → {msg.translatedText}
+                                            </p>
+                                        )}
+                                        {targetLangsSummary && !msg.translatedText && (
                                             <p className="message-targets">
                                                 → {targetLangsSummary}
                                             </p>

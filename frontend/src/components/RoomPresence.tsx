@@ -34,6 +34,8 @@ type RoomAudioMetadata = {
     version?: number;
     roomCode: string;
     turnId: string;
+    utteranceId?: string;
+    generationId?: string;
     speakerId: string;
     speakerName?: string;
     targetLanguage: string;
@@ -48,6 +50,10 @@ type RoomAudioMetadata = {
 type BufferedAudioChunk = {
     pcm: ArrayBuffer;
     sampleRate: number;
+    utteranceId?: string;
+    generationId?: string;
+    chunkIndex: number;
+    payloadHash: string;
 };
 
 type TurnAudioBuffer = {
@@ -70,6 +76,16 @@ type PendingSttStart = {
 
 const API_BASE_URL =
     import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
+function computePayloadHash(buf: ArrayBuffer): string {
+    const view = new Uint8Array(buf);
+    let h = 0;
+    const limit = Math.min(view.length, 64);
+    for (let i = 0; i < limit; i++) {
+        h = (h * 31 + view[i]) >>> 0;
+    }
+    return h.toString(16);
+}
 
 // --------------------------------------------------
 // PARTICIPANT HELPERS
@@ -245,6 +261,10 @@ export default function RoomPresence({
     const turnAudioBuffersRef = useRef(
         new Map<string, TurnAudioBuffer>()
     );
+
+    // Retain completed turn IDs to prevent race-condition re-creation
+    // when chunks arrive out of order or after completion.
+    const completedTurnsRef = useRef<Set<string>>(new Set());
 
     // --------------------------------------------------
     // MICROPHONE CLEANUP
@@ -490,7 +510,13 @@ export default function RoomPresence({
     const schedulePcmChunk = useCallback((
         pcm: ArrayBuffer,
         sampleRate: number,
-        turnId?: string
+        turnId?: string,
+        meta?: {
+            utteranceId?: string;
+            generationId?: string;
+            chunkIndex?: number;
+            payloadHash?: string;
+        }
     ) => {
         const context = playbackContextRef.current;
 
@@ -536,8 +562,24 @@ export default function RoomPresence({
 
         source.start(startAt);
 
-        nextPlaybackTimeRef.current =
-            startAt + audioBuffer.duration;
+        const scheduledEndTime = startAt + audioBuffer.duration;
+        nextPlaybackTimeRef.current = scheduledEndTime;
+
+        // Structured Trace: BOUNDARY 4 (AudioBufferSourceNode.start())
+        console.log(JSON.stringify({
+            t: "TTS_TRACE",
+            event: "sourceStart",
+            turnId: turnId || null,
+            utteranceId: meta?.utteranceId || null,
+            generationId: meta?.generationId || null,
+            chunkIndex: meta?.chunkIndex ?? null,
+            payloadHash: meta?.payloadHash || null,
+            chunkDuration: Number(audioBuffer.duration.toFixed(4)),
+            sourceStartTime: Number(startAt.toFixed(4)),
+            scheduledEndTime: Number(scheduledEndTime.toFixed(4)),
+            contextTime: Number(context.currentTime.toFixed(4)),
+            ts: Date.now(),
+        }));
 
         if (turnId) {
             // Echo prevention: pause mic capture while translated audio is playing
@@ -585,7 +627,13 @@ export default function RoomPresence({
                 schedulePcmChunk(
                     chunk.pcm,
                     chunk.sampleRate,
-                    turnId
+                    turnId,
+                    {
+                        utteranceId: chunk.utteranceId,
+                        generationId: chunk.generationId,
+                        chunkIndex: chunk.chunkIndex,
+                        payloadHash: chunk.payloadHash,
+                    }
                 );
 
             } catch (err) {
@@ -602,8 +650,13 @@ export default function RoomPresence({
             turn.nextChunkIndex++;
         }
 
-        // Release completed turn buffers.
+        // Release completed turn buffers and register in completedTurns.
         if (turn.complete && turn.chunks.size === 0) {
+            completedTurnsRef.current.add(turnId);
+            if (completedTurnsRef.current.size > 200) {
+                const oldest = completedTurnsRef.current.values().next().value;
+                if (oldest) completedTurnsRef.current.delete(oldest);
+            }
             turnAudioBuffersRef.current.delete(turnId);
         }
     }, [schedulePcmChunk]);
@@ -713,16 +766,20 @@ export default function RoomPresence({
                 throw new Error("Invalid PCM audio chunk.");
             }
 
+            // Ignore packets for turns that have already finished playback.
+            if (completedTurnsRef.current.has(metadata.turnId)) {
+                return;
+            }
+
             // Get or create the buffer for this speech turn.
             let turn = turnAudioBuffersRef.current.get(
                 metadata.turnId
             );
 
             if (!turn) {
+                const startIndex = metadata.chunkIndex === 0 ? 0 : 1;
                 turn = {
-                    // Chunk indexes are established by the first
-                    // packet received for this turn.
-                    nextChunkIndex: metadata.chunkIndex,
+                    nextChunkIndex: startIndex,
                     chunks: new Map(),
                     complete: false,
                 };
@@ -733,6 +790,14 @@ export default function RoomPresence({
                 );
             }
 
+            if (
+                metadata.chunkIndex === 0 &&
+                turn.nextChunkIndex === 1 &&
+                !turn.chunks.has(1)
+            ) {
+                turn.nextChunkIndex = 0;
+            }
+
             // Ignore duplicate or previously played chunks.
             if (
                 metadata.chunkIndex < turn.nextChunkIndex ||
@@ -741,9 +806,30 @@ export default function RoomPresence({
                 return;
             }
 
+            const payloadHash = computePayloadHash(pcm);
+            const chunkDuration = (pcm.byteLength / 2) / sampleRate;
+
+            // Structured Trace: BOUNDARY 3 (Frontend WebSocket audio receive)
+            console.log(JSON.stringify({
+                t: "TTS_TRACE",
+                event: "chunkReceived",
+                turnId: metadata.turnId,
+                utteranceId: metadata.utteranceId || null,
+                generationId: metadata.generationId || null,
+                chunkIndex: metadata.chunkIndex,
+                payloadHash,
+                chunkDuration: Number(chunkDuration.toFixed(4)),
+                byteLength: pcm.byteLength,
+                ts: Date.now(),
+            }));
+
             turn.chunks.set(metadata.chunkIndex, {
                 pcm,
                 sampleRate,
+                utteranceId: metadata.utteranceId,
+                generationId: metadata.generationId,
+                chunkIndex: metadata.chunkIndex,
+                payloadHash,
             });
 
             // This plays immediately when audio has been enabled.
@@ -1159,11 +1245,23 @@ export default function RoomPresence({
 
                             if (turn) {
                                 turn.complete = true;
+                                drainTurnBuffer(turnId);
 
                                 if (turn.chunks.size === 0) {
+                                    completedTurnsRef.current.add(turnId);
+                                    if (completedTurnsRef.current.size > 200) {
+                                        const oldest = completedTurnsRef.current.values().next().value;
+                                        if (oldest) completedTurnsRef.current.delete(oldest);
+                                    }
                                     turnAudioBuffersRef.current.delete(
                                         turnId
                                     );
+                                }
+                            } else {
+                                completedTurnsRef.current.add(turnId);
+                                if (completedTurnsRef.current.size > 200) {
+                                    const oldest = completedTurnsRef.current.values().next().value;
+                                    if (oldest) completedTurnsRef.current.delete(oldest);
                                 }
                             }
                         }
@@ -1294,8 +1392,9 @@ export default function RoomPresence({
 
             void stopMicrophone();
 
-            // Clear unfinished audio buffers.
+            // Clear unfinished audio buffers and completed turn registry.
             turnAudioBuffersRef.current.clear();
+            completedTurnsRef.current.clear();
 
             // Close playback context.
             const playbackContext =

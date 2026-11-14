@@ -12,6 +12,6 @@ const server = createServer(app);
 attachPrismaProxy(server);
 attachRoomSocket(server);
 
-server.listen(PORT, () => {
-    console.log(`Vāk backend running on http://localhost:${PORT}`);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Vāk backend running on http://0.0.0.0:${PORT}`);
 });

@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { LANGUAGES, getLanguage } from "../languages";
 
-const API_BASE =
-    import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const API_BASE_URL =
+    import.meta.env.VITE_API_BASE_URL ?? "";
 
 export type RoomSession = {
     roomCode: string;
@@ -11,6 +11,7 @@ export type RoomSession = {
     displayName: string;
     spokenLanguage: string;
     preferredLanguage: string;
+    isAdmin?: boolean;
 };
 
 type RoomLobbyProps = {
@@ -26,6 +27,7 @@ type RoomApiResponse = {
         displayName: string;
         spokenLanguage: string;
         preferredLanguage: string;
+        isAdmin?: boolean;
     };
     participantToken: string;
 };
@@ -38,8 +40,7 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
     // Form inputs
     const [displayName, setDisplayName] = useState("");
     const [roomCode, setRoomCode] = useState("");
-    const [spokenLanguage, setSpokenLanguage] = useState("hi-IN");
-    const [preferredLanguage, setPreferredLanguage] = useState("ta-IN");
+    const [language, setLanguage] = useState("hi-IN");
 
     // "Your room is ready" state
     const [createdSession, setCreatedSession] = useState<RoomSession | null>(null);
@@ -72,13 +73,13 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
         setLoading(true);
 
         try {
-            const response = await fetch(`${API_BASE}/api/rooms`, {
+            const response = await fetch(`${API_BASE_URL}/api/rooms`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     displayName: name,
-                    spokenLanguage,
-                    preferredLanguage,
+                    spokenLanguage: language,
+                    preferredLanguage: language,
                 }),
             });
 
@@ -99,6 +100,7 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                 displayName: result.self.displayName,
                 spokenLanguage: result.self.spokenLanguage,
                 preferredLanguage: result.self.preferredLanguage,
+                isAdmin: result.self.isAdmin ?? true,
             };
 
             setCreatedSession(session);
@@ -131,14 +133,14 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
 
         try {
             const response = await fetch(
-                `${API_BASE}/api/rooms/${encodeURIComponent(code)}/join`,
+                `${API_BASE_URL}/api/rooms/${encodeURIComponent(code)}/join`,
                 {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         displayName: name,
-                        spokenLanguage,
-                        preferredLanguage,
+                        spokenLanguage: language,
+                        preferredLanguage: language,
                     }),
                 }
             );
@@ -148,7 +150,7 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                 if (response.status === 404) {
                     throw new Error("Room not found. Check the code and try again.");
                 } else if (response.status === 409 || data.error?.includes("full")) {
-                    throw new Error("This room is already full (max 3 participants).");
+                    throw new Error("This room is already full (max 5 participants).");
                 }
                 throw new Error(data.error || "Could not join room.");
             }
@@ -165,6 +167,7 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                 displayName: result.self.displayName,
                 spokenLanguage: result.self.spokenLanguage,
                 preferredLanguage: result.self.preferredLanguage,
+                isAdmin: result.self.isAdmin ?? false,
             });
         } catch (err) {
             setError(
@@ -180,7 +183,6 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
     // ==================================================
     if (createdSession) {
         const spoken = getLanguage(createdSession.spokenLanguage);
-        const preferred = getLanguage(createdSession.preferredLanguage);
 
         return (
             <main className="lobby-container">
@@ -195,7 +197,7 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                     <div className="room-ready-badge">Room Created</div>
                     <h1 className="room-ready-title">Your room is ready</h1>
                     <p className="room-ready-subheading">
-                        Share this code with up to 2 other participants so they can join.
+                        Share this code with up to 4 other participants so they can join.
                     </p>
 
                     <div className="room-code-display-box">
@@ -220,12 +222,8 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                             <span className="summary-value">{createdSession.displayName}</span>
                         </div>
                         <div className="ready-summary-row">
-                            <span className="summary-label">Speaking</span>
+                            <span className="summary-label">Language</span>
                             <span className="summary-value">{spoken.nativeName} ({spoken.englishName})</span>
-                        </div>
-                        <div className="ready-summary-row">
-                            <span className="summary-label">Listening in</span>
-                            <span className="summary-value">{preferred.nativeName} ({preferred.englishName})</span>
                         </div>
                     </div>
 
@@ -301,14 +299,14 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                         </div>
 
                         <div className="form-group">
-                            <label htmlFor="spokenLanguage" className="form-label">
-                                I speak
+                            <label htmlFor="createLanguage" className="form-label">
+                                Your language
                             </label>
                             <select
-                                id="spokenLanguage"
+                                id="createLanguage"
                                 className="form-select"
-                                value={spokenLanguage}
-                                onChange={e => setSpokenLanguage(e.target.value)}
+                                value={language}
+                                onChange={e => setLanguage(e.target.value)}
                             >
                                 {LANGUAGES.map(lang => (
                                     <option key={lang.code} value={lang.code}>
@@ -316,24 +314,9 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                                     </option>
                                 ))}
                             </select>
-                        </div>
-
-                        <div className="form-group">
-                            <label htmlFor="preferredLanguage" className="form-label">
-                                I want to hear
-                            </label>
-                            <select
-                                id="preferredLanguage"
-                                className="form-select"
-                                value={preferredLanguage}
-                                onChange={e => setPreferredLanguage(e.target.value)}
-                            >
-                                {LANGUAGES.map(lang => (
-                                    <option key={lang.code} value={lang.code}>
-                                        {lang.nativeName} — {lang.englishName}
-                                    </option>
-                                ))}
-                            </select>
+                            <div className="form-hint" style={{ fontSize: "12px", color: "var(--text-muted, #94a3b8)", marginTop: "4px" }}>
+                                You will speak and hear others translated into this language.
+                            </div>
                         </div>
 
                         {error && (
@@ -421,14 +404,14 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                         </div>
 
                         <div className="form-group">
-                            <label htmlFor="spokenLanguage" className="form-label">
-                                I speak
+                            <label htmlFor="joinLanguage" className="form-label">
+                                Your language
                             </label>
                             <select
-                                id="spokenLanguage"
+                                id="joinLanguage"
                                 className="form-select"
-                                value={spokenLanguage}
-                                onChange={e => setSpokenLanguage(e.target.value)}
+                                value={language}
+                                onChange={e => setLanguage(e.target.value)}
                             >
                                 {LANGUAGES.map(lang => (
                                     <option key={lang.code} value={lang.code}>
@@ -436,24 +419,9 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                                     </option>
                                 ))}
                             </select>
-                        </div>
-
-                        <div className="form-group">
-                            <label htmlFor="preferredLanguage" className="form-label">
-                                I want to hear
-                            </label>
-                            <select
-                                id="preferredLanguage"
-                                className="form-select"
-                                value={preferredLanguage}
-                                onChange={e => setPreferredLanguage(e.target.value)}
-                            >
-                                {LANGUAGES.map(lang => (
-                                    <option key={lang.code} value={lang.code}>
-                                        {lang.nativeName} — {lang.englishName}
-                                    </option>
-                                ))}
-                            </select>
+                            <div className="form-hint" style={{ fontSize: "12px", color: "var(--text-muted, #94a3b8)", marginTop: "4px" }}>
+                                You will speak and hear others translated into this language.
+                            </div>
                         </div>
 
                         {error && (

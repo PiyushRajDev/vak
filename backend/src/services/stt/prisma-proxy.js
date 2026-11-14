@@ -5,7 +5,22 @@ import { SUPPORTED_LANGUAGES } from "../translation/providers/sarvam.js";
 import { processVoiceTurn } from "../voice/voice-pipeline.js";
 
 const PRISMA_ENDPOINT = "wss://api.vachana.ai/stt/v3/stream";
-const WEB_ORIGIN = process.env.WEB_ORIGIN || "http://localhost:5173";
+
+function isAllowedOrigin(origin) {
+    if (!origin) return true;
+    try {
+        const { hostname } = new URL(origin);
+        return (
+            hostname === "localhost" ||
+            hostname === "127.0.0.1" ||
+            /^10\./.test(hostname) ||
+            /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+            /^192\.168\./.test(hostname)
+        );
+    } catch {
+        return false;
+    }
+}
 
 const DEFAULT_VOICE =
     process.env.GNANI_TTS_VOICE || "Devansh";
@@ -32,7 +47,8 @@ export function attachPrismaProxy(server) {
 
         const origin = request.headers.origin;
 
-        if (origin && origin !== WEB_ORIGIN) {
+        if (!isAllowedOrigin(origin)) {
+            console.warn(`[STT] WebSocket rejected from origin: ${origin}`);
             socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
             socket.destroy();
             return;

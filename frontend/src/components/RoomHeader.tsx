@@ -85,13 +85,22 @@ export default function RoomHeader({
                 </div>
             </div>
 
-            {/* Center: Language Pair */}
+            {/* Center: Language */}
             <div className="room-nav-center">
-                <div className="room-lang-pair" title={`${spoken.englishName} to ${preferred.englishName}`}>
-                    <span className="pair-native">{spoken.nativeName}</span>
-                    <span className="pair-arrow">→</span>
-                    <span className="pair-native">{preferred.nativeName}</span>
-                </div>
+                {spoken.code === preferred.code ? (
+                    <div className="room-lang-pair" title={spoken.englishName}>
+                        <span className="pair-native">{spoken.nativeName}</span>
+                        <span className="pair-english" style={{ opacity: 0.75, fontSize: "0.85em", marginLeft: "0.35rem" }}>
+                            ({spoken.englishName})
+                        </span>
+                    </div>
+                ) : (
+                    <div className="room-lang-pair" title={`${spoken.englishName} to ${preferred.englishName}`}>
+                        <span className="pair-native">{spoken.nativeName}</span>
+                        <span className="pair-arrow">→</span>
+                        <span className="pair-native">{preferred.nativeName}</span>
+                    </div>
+                )}
             </div>
 
             {/* Right: Room code + Copy + Leave */}

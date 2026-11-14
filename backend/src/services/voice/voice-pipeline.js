@@ -7,6 +7,7 @@ export async function processVoiceTurn({
     sourceLanguage,
     targetLanguage,
     voice,
+    utteranceId,
     onEvent = () => {},
     onAudioChunk,
 }) {
@@ -44,6 +45,7 @@ export async function processVoiceTurn({
         text: translation.translatedText,
         language: targetLanguage,
         voice,
+        utteranceId,
         collectAudio: false,
         onAudioChunk,
     });

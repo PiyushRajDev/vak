@@ -1,8 +1,38 @@
 
 import WebSocket from "ws";
 import { performance } from "node:perf_hooks";
+import { randomUUID } from "node:crypto";
 
 const ENDPOINT = "wss://api.vachana.ai/api/v1/tts";
+
+// ---------------------------------------------------------------------------
+// VAK_TTS_TRACE — structured per-chunk and per-generation trace logging.
+//
+// Enable with:  VAK_TTS_TRACE=1 node …
+//
+// Each trace line is a self-contained JSON object so it can be correlated
+// against the room-voice-router send boundary (TRACE 2) and the frontend
+// receive / playback boundaries (TRACE 3, TRACE 4).
+// ---------------------------------------------------------------------------
+const isTraceEnabled = () => process.env.VAK_TTS_TRACE === "1";
+
+/** Emit a single-line JSON trace record to stdout. */
+function ttsTrace(event, data) {
+    console.log(JSON.stringify({ t: "TTS_TRACE", event, ...data, ts: Date.now() }));
+}
+
+/**
+ * Quick non-cryptographic fingerprint of the first 64 bytes of a Buffer.
+ * Used to correlate the same PCM payload across process boundaries without
+ * logging full audio data.
+ */
+function payloadHash(buf) {
+    let h = 0;
+    for (let i = 0; i < Math.min(buf.length, 64); i++) {
+        h = (h * 31 + buf[i]) >>> 0;
+    }
+    return h.toString(16);
+}
 
 const SAMPLE_RATE = 48000;
 const DEFAULT_MODEL =
@@ -12,6 +42,7 @@ export async function synthesizeSpeech({
     text,
     language,
     voice,
+    utteranceId,
     model = DEFAULT_MODEL,
     speed = 1.0,
     onAudioChunk,
@@ -66,6 +97,9 @@ export async function synthesizeSpeech({
 
     const startedAt = performance.now();
 
+    // Per-call ID used in traces before the provider returns its own requestId.
+    const generationId = randomUUID();
+
     const chunks = [];
 
     let connectedAt = null;
@@ -76,12 +110,24 @@ export async function synthesizeSpeech({
     let chunkCount = 0;
     let totalAudioBytes = 0;
 
+    if (isTraceEnabled()) {
+        ttsTrace("synthesisStarted", {
+            generationId,
+            utteranceId: utteranceId || null,
+            textLength: text.length,
+            language,
+            voice,
+            model,
+        });
+    }
+
     // Preserve chunk order even if the consumer is asynchronous.
     let chunkQueue = Promise.resolve();
 
     try {
         const result = await new Promise((resolve, reject) => {
             let finished = false;
+            let completing = false;
 
             const timer = setTimeout(() => {
                 fail(new Error("Timbre synthesis timed out"));
@@ -104,7 +150,8 @@ export async function synthesizeSpeech({
             }
 
             async function complete() {
-                if (finished) return;
+                if (finished || completing) return;
+                completing = true;
 
                 try {
                     await chunkQueue;
@@ -113,6 +160,21 @@ export async function synthesizeSpeech({
 
                     finished = true;
                     clearTimeout(timer);
+
+                    if (isTraceEnabled()) {
+                        ttsTrace(
+                            "generationComplete",
+                            {
+                                generationId: requestId ?? generationId,
+                                utteranceId: utteranceId || null,
+                                chunkCount,
+                                totalAudioBytes,
+                                totalMs: Math.round(
+                                    performance.now() - startedAt
+                                ),
+                            }
+                        );
+                    }
 
                     const pcm = collectAudio
                         ? Buffer.concat(chunks)
@@ -229,12 +291,32 @@ export async function synthesizeSpeech({
                         chunks.push(audio);
                     }
 
+                    const chunkDurationSeconds = audio.length / (SAMPLE_RATE * 2);
+
+                    if (isTraceEnabled()) {
+                        ttsTrace(
+                            "chunkGenerated",
+                            {
+                                generationId: requestId ?? generationId,
+                                utteranceId: utteranceId || null,
+                                chunkIndex: chunkCount,
+                                providerChunkIndex:
+                                    message.data.chunk_index ?? null,
+                                payloadHash: payloadHash(audio),
+                                chunkDurationSeconds: Number(
+                                    chunkDurationSeconds.toFixed(4)
+                                ),
+                                audioBytes: audio.length,
+                            }
+                        );
+                    }
+
                     if (onAudioChunk) {
                         const metadata = {
                             chunkNumber: chunkCount,
                             providerChunkIndex:
                                 message.data.chunk_index ?? null,
-                            requestId,
+                            requestId: requestId ?? generationId,
                         };
 
                         chunkQueue = chunkQueue.then(() =>
