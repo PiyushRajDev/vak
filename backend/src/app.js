@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import roomRoutes from "./routes/rooms.js";
+import { isAllowedOrigin } from "./config/origin-policy.js";
 const app = express();
 app.use((req, res, next) => {
     console.log(
@@ -11,7 +12,9 @@ app.use((req, res, next) => {
 });
 
 app.use(cors({
-    origin: true,
+    origin(origin, callback) {
+        callback(null, isAllowedOrigin(origin) ? origin : false);
+    },
     credentials: true
 }));
 

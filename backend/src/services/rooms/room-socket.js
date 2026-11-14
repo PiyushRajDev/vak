@@ -12,29 +12,11 @@ import {
     leaveParticipant,
     RoomError,
 } from "./room-manager.js";
+import { isAllowedOrigin } from "../../config/origin-policy.js";
 
 // Allow WebSocket connections from localhost and RFC-1918 private network
 // addresses on any port. The room WebSocket is already protected by per-
-// participant cryptographic tokens, so origin is a secondary defence only.
-function isAllowedOrigin(origin) {
-    if (!origin) return true; // non-browser clients (curl, ws CLI) have no Origin
-
-    try {
-        const { hostname } = new URL(origin);
-        return (
-            hostname === "localhost" ||
-            hostname === "127.0.0.1" ||
-            // RFC-1918: 10.x.x.x
-            /^10\./.test(hostname) ||
-            // RFC-1918: 172.16–31.x.x
-            /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
-            // RFC-1918: 192.168.x.x
-            /^192\.168\./.test(hostname)
-        );
-    } catch {
-        return false;
-    }
-}
+// participant cryptographic tokens, so origin is a secondary defence only
 
 const PRISMA_ENDPOINT =
     "wss://api.vachana.ai/stt/v3/stream";
