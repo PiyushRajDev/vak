@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import Wordmark from "../components/Wordmark";
-import { getLanguage } from "../languages";
+import { getLanguage, LANGUAGES } from "../languages";
 import { LANDING_SECTION_LANGUAGES, LANDING_TRANSLATIONS } from "./phrases";
 import LandingHeroStage from "./LandingHeroStage";
 import "./LandingPage.css";
@@ -196,6 +196,36 @@ export default function LandingPage({
                         <h3>They hear</h3>
                         <p>Each person hears you in their own language, with the original text alongside.</p>
                     </article>
+                </div>
+            </section>
+
+            <section className="landing-languages landing-section landing-reveal" id="languages" aria-labelledby="landing-languages-title">
+                <div className="landing-languages-heading">
+                    <div>
+                        <span className="landing-eyebrow">Languages</span>
+                        <h2 id="landing-languages-title">Speak any. Hear any.</h2>
+                    </div>
+                    <p>{LANGUAGES.filter(language => language.code !== "en-IN").length} Indian languages, live today.</p>
+                </div>
+
+                <div className="landing-language-wall" aria-label="Supported languages">
+                    {LANGUAGES.map(language => (
+                        <button
+                            type="button"
+                            className="landing-language-tile"
+                            key={language.code}
+                            lang={language.code}
+                            aria-label={`${language.nativeName}, ${language.englishName}`}
+                            title={language.englishName}
+                        >
+                            <span className="landing-language-native">
+                                {language.nativeName}
+                            </span>
+                            <span className="landing-language-english" aria-hidden="true">
+                                {language.englishName}
+                            </span>
+                        </button>
+                    ))}
                 </div>
             </section>
 
