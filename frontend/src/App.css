@@ -2850,6 +2850,11 @@ input:focus, select:focus {
 }
 
 /* Language Pair Chip in Dock */
+.dock-lang-pair-wrapper {
+    position: relative;
+    display: inline-flex;
+}
+
 .dock-lang-pair-chip {
     display: inline-flex;
     align-items: center;
@@ -2862,6 +2867,88 @@ input:focus, select:focus {
     font-weight: 600;
     color: var(--text-primary);
     user-select: none;
+    cursor: pointer;
+    transition: background var(--t-fast), border-color var(--t-fast);
+}
+
+.dock-lang-pair-chip:hover {
+    background: var(--bg-surface-hover);
+    border-color: var(--border-strong);
+}
+
+.pair-preferred-highlight {
+    color: var(--accent);
+}
+
+.pair-edit-icon {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-left: 2px;
+}
+
+.dock-lang-dropdown {
+    position: absolute;
+    bottom: calc(100% + 12px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 220px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7);
+    padding: var(--space-2);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    z-index: var(--z-overlay);
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.dock-lang-dropdown-header {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    padding: 4px 8px;
+}
+
+.dock-lang-opt {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 6px 10px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+    transition: background var(--t-fast);
+}
+
+.dock-lang-opt:hover {
+    background: var(--bg-surface-hover);
+}
+
+.dock-lang-opt.selected {
+    background: var(--accent-dim);
+    color: var(--accent);
+}
+
+.dock-lang-opt.selected .opt-native {
+    color: var(--accent);
+}
+
+.opt-native {
+    font-weight: 600;
+}
+
+.opt-en {
+    font-size: 11px;
+    color: var(--text-muted);
 }
 
 .dock-divider {

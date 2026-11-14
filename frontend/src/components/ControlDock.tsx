@@ -1,4 +1,5 @@
-import { getLanguage } from "../languages";
+import { useState } from "react";
+import { LANGUAGES, getLanguage } from "../languages";
 
 type ControlDockProps = {
     micState: string;
@@ -10,6 +11,7 @@ type ControlDockProps = {
     onRetryMic: () => void;
     spokenLanguage: string;
     preferredLanguage: string;
+    onChangePreferredLanguage?: (code: string) => void;
     showRail: boolean;
     onToggleRail: () => void;
     onOpenDiagnostics: () => void;
@@ -26,6 +28,7 @@ export default function ControlDock({
     onRetryMic,
     spokenLanguage,
     preferredLanguage,
+    onChangePreferredLanguage,
     showRail,
     onToggleRail,
     onOpenDiagnostics,
@@ -33,6 +36,7 @@ export default function ControlDock({
 }: ControlDockProps) {
     const spoken = getLanguage(spokenLanguage);
     const preferred = getLanguage(preferredLanguage);
+    const [langPickerOpen, setLangPickerOpen] = useState(false);
 
     const isSpeaking = micState === "You're speaking";
     const isPlaying = micState.startsWith("Playing in");
@@ -87,14 +91,51 @@ export default function ControlDock({
                 </button>
             )}
 
-            {/* 2. Language Pair Chip */}
-            <div
-                className="dock-lang-pair-chip"
-                title={`You speak ${spoken.englishName}, hearing translated into ${preferred.englishName}`}
-            >
-                <span className="pair-native">{spoken.nativeName}</span>
-                <span className="pair-arrow" aria-hidden="true">→</span>
-                <span className="pair-native">{preferred.nativeName}</span>
+            {/* 2. Language Pair Chip with interactive listening language selection */}
+            <div className="dock-lang-pair-wrapper">
+                <button
+                    type="button"
+                    className="dock-lang-pair-chip"
+                    onClick={() => {
+                        if (onChangePreferredLanguage) {
+                            setLangPickerOpen(prev => !prev);
+                        }
+                    }}
+                    title={`You speak ${spoken.englishName}, hearing translated into ${preferred.englishName}. ${onChangePreferredLanguage ? "Click to change hearing language" : ""}`}
+                    aria-haspopup="listbox"
+                    aria-expanded={langPickerOpen}
+                >
+                    <span className="pair-native">{spoken.nativeName}</span>
+                    <span className="pair-arrow" aria-hidden="true">→</span>
+                    <span className="pair-native pair-preferred-highlight">{preferred.nativeName}</span>
+                    {onChangePreferredLanguage && (
+                        <span className="pair-edit-icon" aria-hidden="true">▾</span>
+                    )}
+                </button>
+
+                {langPickerOpen && onChangePreferredLanguage && (
+                    <div className="dock-lang-dropdown" role="listbox">
+                        <div className="dock-lang-dropdown-header">Hear in:</div>
+                        <div className="dock-lang-dropdown-list">
+                            {LANGUAGES.map(lang => (
+                                <button
+                                    key={lang.code}
+                                    type="button"
+                                    className={`dock-lang-opt ${lang.code === preferredLanguage ? "selected" : ""}`}
+                                    onClick={() => {
+                                        onChangePreferredLanguage(lang.code);
+                                        setLangPickerOpen(false);
+                                    }}
+                                    role="option"
+                                    aria-selected={lang.code === preferredLanguage}
+                                >
+                                    <span className="opt-native">{lang.nativeName}</span>
+                                    <span className="opt-en">{lang.englishName}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* 3. Conversation Toggle */}
@@ -128,7 +169,7 @@ export default function ControlDock({
 
             <div className="dock-divider" aria-hidden="true" />
 
-            {/* 5. Leave Button (Neutral/ghost with phone-down that turns solid red on hover/focus) */}
+            {/* 5. Leave Button (Neutral/ghost with phone-down that turns solid red on hover) */}
             <button
                 type="button"
                 className="dock-btn dock-btn-leave"
@@ -145,3 +186,4 @@ export default function ControlDock({
         </nav>
     );
 }
+

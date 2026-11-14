@@ -246,6 +246,30 @@ export default function RoomPresence({
     const [showRail, setShowRail] = useState(true);
     const [showDiagnostics, setShowDiagnostics] = useState(false);
     const [dismissedHeadphoneTip, setDismissedHeadphoneTip] = useState(false);
+    const [currentPreferredLang, setCurrentPreferredLang] = useState(roomSession.preferredLanguage);
+
+    const handleChangePreferredLanguage = useCallback(async (newLang: string) => {
+        try {
+            const response = await fetch(
+                `${API_BASE_URL}/api/rooms/${roomSession.roomCode}/participants/${roomSession.participantId}`,
+                {
+                    method: "PATCH",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "x-participant-token": roomSession.participantToken,
+                    },
+                    body: JSON.stringify({ preferredLanguage: newLang }),
+                }
+            );
+
+            if (response.ok) {
+                roomSession.preferredLanguage = newLang;
+                setCurrentPreferredLang(newLang);
+            }
+        } catch (err) {
+            console.error("Failed to update listening language:", err);
+        }
+    }, [roomSession]);
 
     // Room conversation messages (Phase 2)
     const [messages, setMessages] =
@@ -1625,7 +1649,8 @@ export default function RoomPresence({
                     onToggleMic={() => void toggleMute()}
                     onRetryMic={() => void startAudioSession()}
                     spokenLanguage={roomSession.spokenLanguage}
-                    preferredLanguage={roomSession.preferredLanguage}
+                    preferredLanguage={currentPreferredLang}
+                    onChangePreferredLanguage={handleChangePreferredLanguage}
                     showRail={showRail}
                     onToggleRail={() => setShowRail(prev => !prev)}
                     onOpenDiagnostics={() => setShowDiagnostics(true)}

@@ -33,7 +33,7 @@ const HERO_PHRASES = [
         ],
     },
     {
-        speaker: "Ananya",
+        speaker: "Sneha",
         initial: "ಅ",
         nativeLang: "ಕನ್ನಡ",
         englishLang: "Kannada",
@@ -902,7 +902,7 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
 
             <footer className="landing-footer">
                 <Wordmark size="sm" />
-                <span className="footer-copy">© 2025 Vāk</span>
+                <span className="footer-copy">© 2026 Vāk</span>
             </footer>
         </main>
     );
