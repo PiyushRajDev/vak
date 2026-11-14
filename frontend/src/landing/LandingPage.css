@@ -629,3 +629,345 @@
         opacity: 1;
     }
 }
+
+
+/* Section A — a two-column text / script composition. */
+.landing-section {
+    padding: clamp(88px, 11vw, 144px) 0;
+}
+
+.landing-section-grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: clamp(28px, 5vw, 72px);
+    padding: clamp(72px, 9vw, 120px) 0;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.landing-idea-copy {
+    grid-column: 1 / span 5;
+    align-self: start;
+    max-width: 480px;
+}
+
+.landing-eyebrow {
+    display: block;
+    margin-bottom: 18px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: .13em;
+    line-height: 1.5;
+    text-transform: uppercase;
+}
+
+.landing-idea h2,
+.landing-section-heading h2,
+.landing-use-cases h2,
+.landing-final-band h2 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: clamp(2.25rem, 4.8vw, 4.3rem);
+    font-weight: 720;
+    letter-spacing: -.065em;
+    line-height: 1.04;
+}
+
+.landing-idea-copy > p {
+    margin: 22px 0 0;
+    color: var(--text-secondary);
+    font-size: 16px;
+    line-height: 1.75;
+}
+
+.landing-script-stack {
+    grid-column: 7 / span 6;
+    align-self: center;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.landing-script-line {
+    display: grid;
+    grid-template-columns: minmax(96px, 122px) minmax(0, 1fr);
+    align-items: baseline;
+    gap: 18px;
+    padding: 17px 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.landing-script-chip {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.landing-script-chip span:first-child {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.landing-script-chip span:last-child {
+    color: var(--text-muted);
+    font-size: 10px;
+}
+
+.landing-script-line p {
+    margin: 0;
+    color: var(--text-primary);
+    font-family: 'Noto Sans Devanagari', 'Noto Sans Tamil', 'Noto Sans Kannada',
+        'Noto Sans Telugu', 'Noto Sans Bengali', 'Noto Sans Oriya',
+        'Noto Sans Gujarati', 'Noto Sans Gurmukhi', var(--font-family);
+    font-size: clamp(17px, 2vw, 23px);
+    line-height: 1.55;
+}
+
+/* Section B — aligned three-step rail. */
+.landing-section-heading {
+    max-width: 760px;
+    margin-bottom: 48px;
+}
+
+.landing-steps-rail {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+    gap: clamp(20px, 3vw, 40px);
+}
+
+.landing-steps-rail::before {
+    content: "";
+    position: absolute;
+    top: 23px;
+    left: 8%;
+    right: 8%;
+    border-top: 1px solid var(--border-strong);
+}
+
+.landing-step {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-height: 238px;
+    padding-right: 16px;
+}
+
+.landing-step-glyph {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    margin-bottom: 24px;
+    border: 1px solid var(--border-strong);
+    border-radius: 50%;
+    background: var(--bg-app);
+    color: var(--text-secondary);
+}
+
+.landing-step-number {
+    margin-bottom: 10px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .08em;
+}
+
+.landing-step h3 {
+    margin: 0 0 12px;
+    color: var(--text-primary);
+    font-size: clamp(18px, 2vw, 22px);
+    font-weight: 650;
+    letter-spacing: -.03em;
+}
+
+.landing-step p {
+    max-width: 310px;
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.7;
+}
+
+/* Section D — three use cases, no card treatment. */
+.landing-use-cases {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: clamp(24px, 4vw, 60px);
+    padding: clamp(88px, 11vw, 144px) 0;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.landing-use-cases-heading {
+    grid-column: 1 / span 5;
+    align-self: start;
+}
+
+.landing-use-cases-list {
+    grid-column: 7 / span 6;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.landing-use-case {
+    margin: 0;
+    padding: 24px 0;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    font-size: clamp(20px, 2.5vw, 30px);
+    font-weight: 560;
+    letter-spacing: -.035em;
+    line-height: 1.35;
+}
+
+/* Final action band. */
+.landing-final-band {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 28px;
+    margin: 12px 0 clamp(80px, 10vw, 128px);
+    padding: 30px 0;
+    border-top: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.landing-final-band h2 {
+    font-size: clamp(2.4rem, 5vw, 4.4rem);
+}
+
+.landing-final-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    flex: 0 0 auto;
+}
+
+.landing-final-actions .btn {
+    min-height: 46px;
+    padding: 11px 17px;
+}
+
+/* Progressive reveal: content is visible without JS or with reduced motion. */
+.landing-reveal,
+.landing-reveal-item {
+    opacity: 1;
+    transform: none;
+}
+
+.landing-reveal-ready .landing-reveal,
+.landing-reveal-ready .landing-reveal-item {
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 420ms ease, transform 420ms ease;
+}
+
+.landing-reveal-ready .landing-reveal.is-visible,
+.landing-reveal-ready .landing-reveal-item.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.landing-script-line:nth-child(2) { transition-delay: 50ms; }
+.landing-script-line:nth-child(3) { transition-delay: 100ms; }
+.landing-script-line:nth-child(4) { transition-delay: 150ms; }
+.landing-script-line:nth-child(5) { transition-delay: 200ms; }
+.landing-script-line:nth-child(6) { transition-delay: 250ms; }
+
+.landing-use-case:nth-child(2) { transition-delay: 70ms; }
+.landing-use-case:nth-child(3) { transition-delay: 140ms; }
+
+@media (max-width: 1024px) {
+    .landing-idea-copy { grid-column: 1 / span 5; }
+    .landing-script-stack { grid-column: 7 / span 6; }
+    .landing-use-cases-heading { grid-column: 1 / span 5; }
+    .landing-use-cases-list { grid-column: 7 / span 6; }
+    .landing-steps-rail { gap: 18px; }
+    .landing-step { min-height: 260px; }
+}
+
+@media (max-width: 640px) {
+    .landing-section { padding: 72px 0; }
+    .landing-section-grid,
+    .landing-use-cases {
+        grid-template-columns: 1fr;
+        gap: 34px;
+        padding: 72px 0;
+    }
+    .landing-idea-copy,
+    .landing-script-stack,
+    .landing-use-cases-heading,
+    .landing-use-cases-list {
+        grid-column: 1;
+    }
+    .landing-idea h2,
+    .landing-section-heading h2,
+    .landing-use-cases h2 {
+        font-size: clamp(2.35rem, 12vw, 3.3rem);
+    }
+    .landing-script-line {
+        grid-template-columns: minmax(88px, 104px) minmax(0, 1fr);
+        gap: 12px;
+        padding: 14px 0;
+    }
+    .landing-script-line p {
+        font-size: 18px;
+        line-height: 1.55;
+    }
+    .landing-section-heading { margin-bottom: 34px; }
+    .landing-steps-rail {
+        grid-template-columns: 1fr;
+        gap: 26px;
+    }
+    .landing-steps-rail::before {
+        top: 24px;
+        bottom: 50px;
+        left: 23px;
+        right: auto;
+        border-top: 0;
+        border-left: 1px solid var(--border-strong);
+    }
+    .landing-step {
+        display: grid;
+        grid-template-columns: 48px minmax(0, 1fr);
+        grid-template-rows: auto auto auto;
+        column-gap: 18px;
+        min-height: 0;
+        padding: 0;
+    }
+    .landing-step-glyph {
+        grid-column: 1;
+        grid-row: 1 / span 3;
+        margin: 0;
+    }
+    .landing-step-number,
+    .landing-step h3,
+    .landing-step p {
+        grid-column: 2;
+    }
+    .landing-step-number { margin: 0 0 6px; }
+    .landing-step h3 { margin-bottom: 8px; }
+    .landing-use-case { padding: 20px 0; font-size: 23px; }
+    .landing-final-band {
+        align-items: flex-start;
+        flex-direction: column;
+        margin-bottom: 72px;
+        padding: 26px 0;
+    }
+    .landing-final-actions { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .landing-reveal-ready .landing-reveal,
+    .landing-reveal-ready .landing-reveal-item,
+    .landing-reveal-ready .landing-reveal.is-visible,
+    .landing-reveal-ready .landing-reveal-item.is-visible {
+        opacity: 1;
+        transform: none;
+        transition: none;
+    }
+}
