@@ -1,4 +1,5 @@
-import { getLanguage } from "../languages";
+import { useState } from "react";
+import Wordmark from "./Wordmark";
 
 export type ConnectionState =
     | "connected"
@@ -9,29 +10,35 @@ export type ConnectionState =
 
 type RoomHeaderProps = {
     roomCode: string;
-    spokenLanguage: string;
-    preferredLanguage: string;
     participantCount: number;
     connectionState: ConnectionState;
     copied: boolean;
     onCopyRoomCode: () => void;
-    onLeaveRoom: () => void;
     onReconnect?: () => void;
 };
 
 export default function RoomHeader({
     roomCode,
-    spokenLanguage,
-    preferredLanguage,
     participantCount,
     connectionState,
     copied,
     onCopyRoomCode,
-    onLeaveRoom,
     onReconnect,
 }: RoomHeaderProps) {
-    const spoken = getLanguage(spokenLanguage);
-    const preferred = getLanguage(preferredLanguage);
+    const [copiedLink, setCopiedLink] = useState(false);
+
+    const handleCopyInviteLink = async () => {
+        try {
+            // ONLY the room code in the URL, NEVER a participant token
+            const inviteUrl = `${window.location.origin}/?join=${encodeURIComponent(roomCode)}`;
+            await navigator.clipboard.writeText(inviteUrl);
+            setCopiedLink(true);
+            setTimeout(() => setCopiedLink(false), 2000);
+        } catch {
+            // fallback to copying just code
+            onCopyRoomCode();
+        }
+    };
 
     const connectionLabel = (() => {
         switch (connectionState) {
@@ -44,7 +51,7 @@ export default function RoomHeader({
             case "error":
                 return "Connection lost";
             case "disconnected":
-                return "Disconnected";
+                return "Offline";
         }
     })();
 
@@ -53,7 +60,6 @@ export default function RoomHeader({
             case "connected":
                 return "conn-dot-online";
             case "reconnecting":
-                return "conn-dot-reconnecting";
             case "connecting":
                 return "conn-dot-reconnecting";
             case "error":
@@ -63,48 +69,40 @@ export default function RoomHeader({
     })();
 
     return (
-        <header className="room-nav-header">
-            {/* Left: Brand + Connection indicator + People count */}
-            <div className="room-nav-left">
-                <div className="brand room-nav-brand">
-                    <span className="brand-indic">वाक्</span>
-                    <span className="brand-latin">VĀK</span>
-                </div>
+        <header className="room-topbar" role="banner">
+            {/* Left: Brand */}
+            <div className="topbar-left">
+                <Wordmark size="sm" />
+            </div>
 
-                <div className="room-nav-meta">
-                    <div className="room-connection-chip">
-                        <span className={`conn-dot ${connectionDotClass}`} />
-                        <span className="conn-label">{connectionLabel}</span>
-                    </div>
-
-                    <span className="room-nav-divider">·</span>
-
-                    <span className="room-people-count">
-                        {participantCount} {participantCount === 1 ? "person" : "people"}
-                    </span>
+            {/* Center: Room Code Chip + Copy Code + Copy Invite Link */}
+            <div className="topbar-center">
+                <div className="room-code-chip">
+                    <span className="chip-label">Room</span>
+                    <code className="chip-code">{roomCode}</code>
+                    <button
+                        type="button"
+                        className={`chip-copy-btn ${copied ? "copied" : ""}`}
+                        onClick={onCopyRoomCode}
+                        aria-label="Copy room code"
+                        title="Copy room code"
+                    >
+                        {copied ? "Copied" : "Copy"}
+                    </button>
+                    <button
+                        type="button"
+                        className={`chip-copy-btn chip-link-btn ${copiedLink ? "copied" : ""}`}
+                        onClick={() => void handleCopyInviteLink()}
+                        aria-label="Copy invite link"
+                        title="Copy invite link (room code only)"
+                    >
+                        {copiedLink ? "Link copied" : "Copy link"}
+                    </button>
                 </div>
             </div>
 
-            {/* Center: Language */}
-            <div className="room-nav-center">
-                {spoken.code === preferred.code ? (
-                    <div className="room-lang-pair" title={spoken.englishName}>
-                        <span className="pair-native">{spoken.nativeName}</span>
-                        <span className="pair-english" style={{ opacity: 0.75, fontSize: "0.85em", marginLeft: "0.35rem" }}>
-                            ({spoken.englishName})
-                        </span>
-                    </div>
-                ) : (
-                    <div className="room-lang-pair" title={`${spoken.englishName} to ${preferred.englishName}`}>
-                        <span className="pair-native">{spoken.nativeName}</span>
-                        <span className="pair-arrow">→</span>
-                        <span className="pair-native">{preferred.nativeName}</span>
-                    </div>
-                )}
-            </div>
-
-            {/* Right: Room code + Copy + Leave */}
-            <div className="room-nav-right">
+            {/* Right: Connection State + Single People Count */}
+            <div className="topbar-right">
                 {connectionState === "error" && onReconnect && (
                     <button
                         type="button"
@@ -115,28 +113,31 @@ export default function RoomHeader({
                     </button>
                 )}
 
-                <div className="room-code-badge">
-                    <span className="room-code-label">Room</span>
-                    <code className="room-code-text">{roomCode}</code>
-                    <button
-                        type="button"
-                        className={`btn-copy-code ${copied ? "copied" : ""}`}
-                        onClick={onCopyRoomCode}
-                        aria-label="Copy room code"
-                    >
-                        {copied ? "Copied" : "Copy"}
-                    </button>
+                <div className="conn-badge" aria-live="polite">
+                    <span className={`conn-dot ${connectionDotClass}`} aria-hidden="true" />
+                    <span className="conn-label">{connectionLabel}</span>
                 </div>
 
-                <button
-                    type="button"
-                    className="btn btn-leave"
-                    onClick={onLeaveRoom}
-                >
-                    Leave
-                </button>
+                <div className="people-count" aria-label={`${participantCount} ${participantCount === 1 ? "person" : "people"} in room`}>
+                    <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                    >
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                    <span>{participantCount}</span>
+                </div>
             </div>
         </header>
     );
 }
-

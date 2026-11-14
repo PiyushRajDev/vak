@@ -1,0 +1,137 @@
+import type { ConversationMessage } from "./ConversationFeed";
+
+type DiagnosticsDrawerProps = {
+    isOpen: boolean;
+    onClose: () => void;
+    roomCode: string;
+    participantId: string;
+    spokenLanguage: string;
+    preferredLanguage: string;
+    messages: ConversationMessage[];
+    playbackContextState?: string;
+    micContextState?: string;
+};
+
+export default function DiagnosticsDrawer({
+    isOpen,
+    onClose,
+    roomCode,
+    participantId,
+    spokenLanguage,
+    preferredLanguage,
+    messages,
+    playbackContextState = "running",
+    micContextState = "running",
+}: DiagnosticsDrawerProps) {
+    if (!isOpen) return null;
+
+    // Filter messages with latency measurements
+    const measuredMessages = messages.filter(m => m.latencyMs !== undefined);
+    const avgLatency = measuredMessages.length > 0
+        ? Math.round(
+            measuredMessages.reduce((sum, m) => sum + (m.latencyMs || 0), 0) /
+            measuredMessages.length
+        )
+        : null;
+
+    return (
+        <div className="diagnostics-backdrop" onClick={onClose} role="presentation">
+            <div
+                className="diagnostics-drawer"
+                role="dialog"
+                aria-modal="true"
+                aria-label="System Diagnostics"
+                onClick={e => e.stopPropagation()}
+            >
+                <header className="diag-header">
+                    <div className="diag-title-row">
+                        <span className="diag-icon" aria-hidden="true">⚡</span>
+                        <h2 className="diag-title">Vāk Diagnostics</h2>
+                    </div>
+                    <button
+                        type="button"
+                        className="diag-close-btn"
+                        onClick={onClose}
+                        aria-label="Close diagnostics"
+                    >
+                        ✕
+                    </button>
+                </header>
+
+                <div className="diag-body">
+                    {/* Connection & Audio Info */}
+                    <section className="diag-section">
+                        <h3 className="diag-section-title">Session State</h3>
+                        <div className="diag-grid">
+                            <div className="diag-stat">
+                                <span className="stat-label">Room Code</span>
+                                <code className="stat-value">{roomCode}</code>
+                            </div>
+                            <div className="diag-stat">
+                                <span className="stat-label">Participant ID</span>
+                                <code className="stat-value">{participantId.slice(0, 10)}…</code>
+                            </div>
+                            <div className="diag-stat">
+                                <span className="stat-label">Spoken Lang</span>
+                                <span className="stat-value">{spokenLanguage}</span>
+                            </div>
+                            <div className="diag-stat">
+                                <span className="stat-label">Listening Lang</span>
+                                <span className="stat-value">{preferredLanguage}</span>
+                            </div>
+                            <div className="diag-stat">
+                                <span className="stat-label">Mic Context</span>
+                                <span className="stat-value stat-ok">{micContextState}</span>
+                            </div>
+                            <div className="diag-stat">
+                                <span className="stat-label">Playback Context</span>
+                                <span className="stat-value stat-ok">{playbackContextState}</span>
+                            </div>
+                            {avgLatency !== null && (
+                                <div className="diag-stat">
+                                    <span className="stat-label">Avg Pipeline Latency</span>
+                                    <span className="stat-value stat-accent">{avgLatency} ms</span>
+                                </div>
+                            )}
+                        </div>
+                    </section>
+
+                    {/* Per-utterance pipeline timings */}
+                    <section className="diag-section">
+                        <h3 className="diag-section-title">
+                            Recent Pipeline Utterances ({messages.length})
+                        </h3>
+
+                        {messages.length === 0 ? (
+                            <p className="diag-empty">No utterances recorded yet in this session.</p>
+                        ) : (
+                            <div className="diag-utterance-list">
+                                {messages.slice(-10).reverse().map(msg => (
+                                    <div key={msg.id} className="diag-utterance-item">
+                                        <div className="diag-utt-meta">
+                                            <span className="diag-utt-speaker">{msg.speakerName}</span>
+                                            <span className="diag-utt-langs">
+                                                {msg.sourceLanguage} → {msg.targetLanguage || "all"}
+                                            </span>
+                                            {msg.latencyMs !== undefined && (
+                                                <span className="diag-utt-latency">
+                                                    {msg.latencyMs} ms
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="diag-utt-text">
+                                            <span className="diag-text-orig">{msg.originalText}</span>
+                                            {msg.translatedText && (
+                                                <span className="diag-text-trans">↳ {msg.translatedText}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </section>
+                </div>
+            </div>
+        </div>
+    );
+}

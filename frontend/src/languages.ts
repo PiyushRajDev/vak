@@ -24,3 +24,22 @@ export function getLanguage(code?: string): Language {
     if (found) return found;
     return { code, nativeName: code, englishName: code };
 }
+
+const SCRIPT_GLYPHS: Record<string, string> = {
+    "hi-in": "क",
+    "ta-in": "அ",
+    "te-in": "త",
+    "kn-in": "ಕ",
+    "bn-in": "ব",
+    "mr-in": "म",
+    "gu-in": "ગ",
+    "ml-in": "മ",
+    "pa-in": "ਪ",
+    "od-in": "ଓ",
+    "en-in": "A",
+};
+
+export function getScriptGlyph(code?: string): string {
+    if (!code) return "वा";
+    return SCRIPT_GLYPHS[code.toLowerCase()] || "वा";
+}

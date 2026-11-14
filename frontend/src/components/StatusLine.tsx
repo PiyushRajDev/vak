@@ -1,7 +1,6 @@
 import { getLanguage } from "../languages";
 
 type StatusLineProps = {
-    connectedCount: number;
     activeSpeaker: { id: string; displayName: string } | null;
     isProcessingTranslation: boolean;
     playingTurnLanguage?: string | null;
@@ -10,15 +9,14 @@ type StatusLineProps = {
 };
 
 export default function StatusLine({
-    connectedCount,
     activeSpeaker,
     isProcessingTranslation,
     playingTurnLanguage,
     selfParticipantId,
     listenerCount,
 }: StatusLineProps) {
-    let statusText: string;
-    let dotClass = "status-dot-idle";
+    let statusText = "";
+    let dotClass = "";
 
     if (activeSpeaker) {
         dotClass = "status-dot-active";
@@ -40,16 +38,15 @@ export default function StatusLine({
         dotClass = "status-dot-playback";
         const lang = getLanguage(playingTurnLanguage);
         statusText = `Playing in ${lang.nativeName}`;
-    } else {
-        dotClass = "status-dot-idle";
-        statusText = `${connectedCount} ${
-            connectedCount === 1 ? "person" : "people"
-        } connected`;
+    }
+
+    if (!statusText) {
+        return null;
     }
 
     return (
-        <div className="room-status-line" aria-live="polite">
-            <span className={`status-dot ${dotClass}`} />
+        <div className="stage-status-inline" aria-live="polite">
+            <span className={`status-dot ${dotClass}`} aria-hidden="true" />
             <span className="status-text">{statusText}</span>
         </div>
     );

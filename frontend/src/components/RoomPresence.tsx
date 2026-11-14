@@ -5,8 +5,10 @@ import {
     useRef,
     useState,
 } from "react";
+import ControlDock from "./ControlDock";
 import ConversationFeed, { type ConversationMessage } from "./ConversationFeed";
-import ParticipantTiles from "./ParticipantTiles";
+import DiagnosticsDrawer from "./DiagnosticsDrawer";
+import ParticipantTiles, { type CaptionEntry } from "./ParticipantTiles";
 import RoomHeader, { type ConnectionState } from "./RoomHeader";
 import StatusLine from "./StatusLine";
 import { getLanguage } from "../languages";
@@ -209,6 +211,41 @@ export default function RoomPresence({
     const [isProcessingTranslation, setIsProcessingTranslation] =
         useState(false);
     const [micError, setMicError] = useState<string | null>(null);
+
+    // Live Captions on Tile (Signature feature: fades after 4s)
+    const [captionMap, setCaptionMap] = useState<Record<string, CaptionEntry>>({});
+    const captionTimersRef = useRef<Map<string, number>>(new Map());
+
+    const triggerCaption = useCallback((speakerId: string, text: string) => {
+        if (!text) return;
+        setCaptionMap(prev => ({
+            ...prev,
+            [speakerId]: { text, active: true },
+        }));
+
+        const existingTimer = captionTimersRef.current.get(speakerId);
+        if (existingTimer !== undefined) {
+            window.clearTimeout(existingTimer);
+        }
+
+        const timer = window.setTimeout(() => {
+            setCaptionMap(prev => {
+                if (!prev[speakerId]) return prev;
+                return {
+                    ...prev,
+                    [speakerId]: { ...prev[speakerId], active: false },
+                };
+            });
+            captionTimersRef.current.delete(speakerId);
+        }, 4000);
+
+        captionTimersRef.current.set(speakerId, timer);
+    }, []);
+
+    // UI Panel controls
+    const [showRail, setShowRail] = useState(true);
+    const [showDiagnostics, setShowDiagnostics] = useState(false);
+    const [dismissedHeadphoneTip, setDismissedHeadphoneTip] = useState(false);
 
     // Room conversation messages (Phase 2)
     const [messages, setMessages] =
@@ -498,6 +535,35 @@ export default function RoomPresence({
             isMuted: nextMuted === true,
         }));
     }, [startAudioSession]);
+
+    // Keyboard Shortcuts (M: mic, C: conversation rail, D: diagnostics, Esc: close)
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const target = e.target as HTMLElement | null;
+            if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) {
+                return;
+            }
+
+            if (e.key === "m" || e.key === "M") {
+                e.preventDefault();
+                void toggleMute();
+            } else if (e.key === "c" || e.key === "C") {
+                e.preventDefault();
+                setShowRail(prev => !prev);
+            } else if (e.key === "d" || e.key === "D") {
+                e.preventDefault();
+                setShowDiagnostics(prev => !prev);
+            } else if (e.key === "Escape") {
+                setShowDiagnostics(false);
+                if (window.innerWidth < 1100) {
+                    setShowRail(false);
+                }
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [toggleMute]);
 
     // ==================================================
     // TTS AUDIO PLAYBACK
@@ -1092,6 +1158,12 @@ export default function RoomPresence({
                             `${speaker.id ?? "speaker"}-${Date.now()}`
                         );
 
+                        // Trigger live caption on tile (my own original or interim speaker text)
+                        triggerCaption(
+                            isSelf ? roomSession.participantId : (speaker.id || "speaker"),
+                            transcript.text
+                        );
+
                         setMessages(prev => {
                             const existingIndex = prev.findIndex(m => m.id === msgId);
                             if (existingIndex >= 0) {
@@ -1172,6 +1244,11 @@ export default function RoomPresence({
                         const translatedText = message.translatedText;
 
                         if (typeof translatedText === "string") {
+                            // Update live tile caption in my listening language
+                            if (speakerId) {
+                                triggerCaption(speakerId, translatedText);
+                            }
+
                             setMessages(prev => {
                                 let idx = -1;
                                 if (turnId) {
@@ -1396,6 +1473,10 @@ export default function RoomPresence({
             turnAudioBuffersRef.current.clear();
             completedTurnsRef.current.clear();
 
+            // Clear caption timers
+            captionTimersRef.current.forEach(timer => window.clearTimeout(timer));
+            captionTimersRef.current.clear();
+
             // Close playback context.
             const playbackContext =
                 playbackContextRef.current;
@@ -1451,31 +1532,15 @@ export default function RoomPresence({
     // ==================================================
 
     return (
-        <section className="room-presence">
-
-            {/* ROOM HEADER (PHASE 5) */}
+        <div className="room-layout">
+            {/* Top Bar: Wordmark, Room Code Chip + Copy Link, Connection Status, Single People Count */}
             <RoomHeader
                 roomCode={roomSession.roomCode}
-                spokenLanguage={roomSession.spokenLanguage}
-                preferredLanguage={roomSession.preferredLanguage}
                 participantCount={connectedCount}
                 connectionState={connectionState}
                 copied={copied}
                 onCopyRoomCode={handleCopyRoomCode}
-                onLeaveRoom={onLeaveRoom || (() => {})}
                 onReconnect={handleManualReconnect}
-            />
-
-            {/* STATUS LINE (PHASE 3) */}
-            <StatusLine
-                connectedCount={connectedCount}
-                activeSpeaker={activeSpeaker}
-                isProcessingTranslation={isProcessingTranslation}
-                playingTurnLanguage={
-                    playingTurnId ? roomSession.preferredLanguage : null
-                }
-                selfParticipantId={roomSession.participantId}
-                listenerCount={listenerCount}
             />
 
             {error && (
@@ -1484,89 +1549,102 @@ export default function RoomPresence({
                 </div>
             )}
 
-            {/* PARTICIPANT TILES (PHASE 4) */}
-            <ParticipantTiles
-                participants={participants}
-                selfParticipantId={roomSession.participantId}
-                activeSpeakerId={activeSpeaker?.id || null}
-            />
+            <div className="room-stage-wrap">
+                {/* Center Stage: Adaptive Tiles Grid + Inline Status */}
+                <main className="room-stage">
+                    {/* Headphone tip: dismissible inside the room */}
+                    {!dismissedHeadphoneTip && (
+                        <div className="room-headphone-tip-banner" role="status">
+                            <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                            >
+                                <path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V10a9 9 0 0 1 18 0v9a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3" />
+                            </svg>
+                            <span>Headphones recommended for the best experience.</span>
+                            <button
+                                type="button"
+                                className="tip-dismiss-btn"
+                                onClick={() => setDismissedHeadphoneTip(true)}
+                                aria-label="Dismiss tip"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    )}
 
-            {/* LIVE CONVERSATION TRANSCRIPT (HERO) */}
-            <ConversationFeed
-                messages={messages}
-                playingTurnId={playingTurnId}
-                participants={participants}
-                selfParticipantId={roomSession.participantId}
-            />
-
-            {/* SINGLE MEET-STYLE MIC CONTROL (PHASE 3) */}
-            <div className="room-mic-bar">
-                {micError ? (
-                    <div className="mic-error-pill">
-                        <span className="mic-error-text">{micError}</span>
-                        <button
-                            type="button"
-                            className="btn btn-primary btn-sm"
-                            onClick={() => void startAudioSession()}
-                        >
-                            Try again
-                        </button>
-                    </div>
-                ) : (
-                    <button
-                        type="button"
-                        className={`btn-meet-mic ${
-                            isMuted ? "btn-meet-muted" : "btn-meet-active"
-                        }`}
-                        onClick={() => void toggleMute()}
-                        disabled={connectionState !== "connected" || isStarting}
-                        aria-label={
-                            isMuted ? "Unmute microphone" : "Mute microphone"
+                    {/* Inline Stage Status Line */}
+                    <StatusLine
+                        activeSpeaker={activeSpeaker}
+                        isProcessingTranslation={isProcessingTranslation}
+                        playingTurnLanguage={
+                            playingTurnId ? roomSession.preferredLanguage : null
                         }
-                    >
-                        <span className="meet-mic-icon">
-                            {isMuted ? (
-                                <svg
-                                    width="20"
-                                    height="20"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                >
-                                    <line x1="1" y1="1" x2="23" y2="23" />
-                                    <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
-                                    <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
-                                    <line x1="12" y1="19" x2="12" y2="23" />
-                                    <line x1="8" y1="23" x2="16" y2="23" />
-                                </svg>
-                            ) : (
-                                <svg
-                                    width="20"
-                                    height="20"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                >
-                                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                                    <line x1="12" y1="19" x2="12" y2="23" />
-                                    <line x1="8" y1="23" x2="16" y2="23" />
-                                </svg>
-                            )}
-                        </span>
-                        <span className="meet-mic-label">
-                            {isMuted ? "Muted" : derivedMicState}
-                        </span>
-                    </button>
-                )}
+                        selfParticipantId={roomSession.participantId}
+                        listenerCount={listenerCount}
+                    />
+
+                    {/* Adaptive Participant Tile Grid with Script Watermarks & Live Captions on Tile */}
+                    <ParticipantTiles
+                        participants={participants}
+                        selfParticipantId={roomSession.participantId}
+                        activeSpeakerId={activeSpeaker?.id || null}
+                        roomCode={roomSession.roomCode}
+                        captionMap={captionMap}
+                        onCopyRoomCode={handleCopyRoomCode}
+                    />
+                </main>
+
+                {/* Conversation Rail: Persistent on desktop (≥1100px), bottom sheet on mobile */}
+                <div className={`room-rail-container ${showRail ? "rail-open" : "rail-closed"}`}>
+                    <ConversationFeed
+                        messages={messages}
+                        playingTurnId={playingTurnId}
+                        participants={participants}
+                        selfParticipantId={roomSession.participantId}
+                        onClose={() => setShowRail(false)}
+                    />
+                </div>
             </div>
 
-        </section>
+            {/* Floating Control Dock (Bottom Center) */}
+            <div className="dock-floating-container">
+                <ControlDock
+                    micState={isMuted ? "Muted" : derivedMicState}
+                    isMuted={isMuted}
+                    micError={micError}
+                    isStarting={isStarting}
+                    isDisabled={connectionState !== "connected"}
+                    onToggleMic={() => void toggleMute()}
+                    onRetryMic={() => void startAudioSession()}
+                    spokenLanguage={roomSession.spokenLanguage}
+                    preferredLanguage={roomSession.preferredLanguage}
+                    showRail={showRail}
+                    onToggleRail={() => setShowRail(prev => !prev)}
+                    onOpenDiagnostics={() => setShowDiagnostics(true)}
+                    onLeaveRoom={onLeaveRoom || (() => {})}
+                />
+            </div>
+
+            {/* Hidden Diagnostics Drawer */}
+            <DiagnosticsDrawer
+                isOpen={showDiagnostics}
+                onClose={() => setShowDiagnostics(false)}
+                roomCode={roomSession.roomCode}
+                participantId={roomSession.participantId}
+                spokenLanguage={roomSession.spokenLanguage}
+                preferredLanguage={roomSession.preferredLanguage}
+                messages={messages}
+                playbackContextState={playbackContextRef.current?.state}
+                micContextState={micContextRef.current?.state}
+            />
+        </div>
     );
 }
