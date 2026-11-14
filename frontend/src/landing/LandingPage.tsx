@@ -240,6 +240,38 @@ export default function LandingPage({
                 </div>
             </section>
 
+            <section className="landing-under-hood landing-section landing-reveal" id="under-the-hood" aria-labelledby="landing-under-hood-title">
+                <div className="landing-under-hood-heading">
+                    <span className="landing-eyebrow">Under the hood</span>
+                    <h2 id="landing-under-hood-title">Speech in. Speech out.</h2>
+                    <p>
+                        Speech recognition, translation and speech synthesis, running while the conversation happens.
+                    </p>
+                </div>
+
+                <div className="landing-pipeline" aria-label="Voice processing pipeline">
+                    <div className="landing-pipeline-step">
+                        <span className="landing-pipeline-label">Your voice</span>
+                        <span className="landing-pipeline-provider">Browser microphone · 16 kHz mono PCM</span>
+                    </div>
+                    <span className="landing-pipeline-arrow" aria-hidden="true">→</span>
+                    <div className="landing-pipeline-step">
+                        <span className="landing-pipeline-label">Transcription</span>
+                        <span className="landing-pipeline-provider">Prisma STT v3.0 · Vachana</span>
+                    </div>
+                    <span className="landing-pipeline-arrow" aria-hidden="true">→</span>
+                    <div className="landing-pipeline-step">
+                        <span className="landing-pipeline-label">Translation</span>
+                        <span className="landing-pipeline-provider">Sarvam Translate v1</span>
+                    </div>
+                    <span className="landing-pipeline-arrow" aria-hidden="true">→</span>
+                    <div className="landing-pipeline-step">
+                        <span className="landing-pipeline-label">Their voice</span>
+                        <span className="landing-pipeline-provider">Timbre TTS v3.0 · Vachana</span>
+                    </div>
+                </div>
+            </section>
+
             <section className="landing-final-band landing-reveal" aria-labelledby="landing-final-title">
                 <h2 id="landing-final-title">Say it in yours.</h2>
                 <div className="landing-final-actions">

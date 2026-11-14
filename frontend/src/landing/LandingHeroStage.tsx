@@ -12,7 +12,7 @@ import {
 const PARTICIPANTS: ParticipantTileInfo[] = [
     {
         id: "landing-hindi",
-        displayName: "ह",
+        displayName: getScriptGlyph("hi-IN"),
         spokenLanguage: "hi-IN",
         preferredLanguage: "ta-IN",
         connected: true,
@@ -20,7 +20,7 @@ const PARTICIPANTS: ParticipantTileInfo[] = [
     },
     {
         id: "landing-tamil",
-        displayName: "த",
+        displayName: getScriptGlyph("ta-IN"),
         spokenLanguage: "ta-IN",
         preferredLanguage: "kn-IN",
         connected: true,
@@ -28,7 +28,7 @@ const PARTICIPANTS: ParticipantTileInfo[] = [
     },
     {
         id: "landing-kannada",
-        displayName: "ಕ",
+        displayName: getScriptGlyph("kn-IN"),
         spokenLanguage: "kn-IN",
         preferredLanguage: "hi-IN",
         connected: true,

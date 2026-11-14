@@ -1118,3 +1118,107 @@
         transform: none;
     }
 }
+/* Section E — real defaults and service names from the voice pipeline. */
+.landing-under-hood {
+    border-top: 1px solid var(--border-subtle);
+}
+
+.landing-under-hood-heading {
+    max-width: 720px;
+    margin-bottom: 42px;
+}
+
+.landing-under-hood-heading h2 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: clamp(2.4rem, 5vw, 4.5rem);
+    font-weight: 720;
+    letter-spacing: -.065em;
+    line-height: 1.02;
+}
+
+.landing-under-hood-heading > p {
+    max-width: 580px;
+    margin: 20px 0 0;
+    color: var(--text-secondary);
+    font-size: 15px;
+    line-height: 1.7;
+}
+
+.landing-pipeline {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: clamp(12px, 2vw, 24px);
+    padding: 24px 0;
+    border-top: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.landing-pipeline-step {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    min-width: 0;
+    min-height: 74px;
+}
+
+.landing-pipeline-label {
+    color: var(--text-primary);
+    font-size: clamp(16px, 1.8vw, 21px);
+    font-weight: 600;
+    letter-spacing: -.035em;
+    line-height: 1.35;
+}
+
+.landing-pipeline-provider {
+    margin-top: 8px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.landing-pipeline-arrow {
+    color: var(--text-muted);
+    font-size: 18px;
+    line-height: 1;
+}
+
+@media (max-width: 1024px) {
+    .landing-pipeline {
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+        row-gap: 24px;
+    }
+
+    .landing-pipeline-step:nth-of-type(5) {
+        grid-column: 1;
+    }
+}
+
+@media (max-width: 640px) {
+    .landing-under-hood-heading {
+        margin-bottom: 30px;
+    }
+
+    .landing-pipeline {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0;
+        padding: 14px 0;
+    }
+
+    .landing-pipeline-step {
+        min-height: 72px;
+        padding: 8px 0;
+    }
+
+    .landing-pipeline-arrow {
+        align-self: flex-start;
+        padding: 0 0 0 4px;
+        transform: rotate(90deg);
+        transform-origin: center;
+    }
+}
