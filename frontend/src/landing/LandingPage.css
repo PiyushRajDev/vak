@@ -171,3 +171,461 @@
         animation-iteration-count: 1 !important;
     }
 }
+
+/* Hero — left-aligned display type and real room tiles. */
+.landing-hero {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    align-items: center;
+    gap: clamp(24px, 4vw, 56px);
+    padding: clamp(96px, 12vw, 160px) 0 clamp(72px, 9vw, 112px);
+}
+
+.landing-hero-copy {
+    grid-column: 1 / span 5;
+    min-width: 0;
+}
+
+.landing-hero h1 {
+    max-width: 640px;
+    margin: 0;
+    color: var(--text-primary);
+    font-size: clamp(3.25rem, 7.2vw, 6.6rem);
+    font-weight: 760;
+    line-height: .98;
+    letter-spacing: -.075em;
+}
+
+.landing-hero-subline {
+    max-width: 440px;
+    margin: 28px 0 0;
+    color: var(--text-secondary);
+    font-size: clamp(16px, 1.6vw, 19px);
+    line-height: 1.6;
+}
+
+.landing-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 32px;
+}
+
+.landing-hero-actions .btn {
+    min-height: 48px;
+    padding: 12px 18px;
+    border-radius: var(--radius-sm);
+}
+
+.landing-hero-note {
+    margin: 18px 0 0;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.landing-stage {
+    position: relative;
+    grid-column: 6 / span 7;
+    min-width: 0;
+    isolation: isolate;
+    padding: 28px 0 0;
+}
+
+.landing-stage-texture {
+    position: absolute;
+    z-index: -1;
+    top: 50%;
+    left: 50%;
+    color: var(--text-primary);
+    opacity: .035;
+    font-family: 'Noto Sans Devanagari', var(--font-family);
+    font-size: clamp(180px, 28vw, 340px);
+    font-weight: 700;
+    line-height: 1;
+    transform: translate(-50%, -56%);
+    pointer-events: none;
+    user-select: none;
+}
+
+.landing-stage .stage-tiles-container {
+    position: relative;
+    z-index: 1;
+    min-height: clamp(220px, 28vw, 340px);
+    overflow: visible;
+}
+
+.landing-stage .participant-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: center;
+    gap: 0;
+    width: 100%;
+    max-width: 740px;
+    margin: 0 auto;
+}
+
+.landing-stage .p-tile {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    min-width: 0;
+    min-height: clamp(185px, 20vw, 230px);
+    aspect-ratio: 4 / 5;
+    padding: 10px;
+    border-radius: var(--radius-lg);
+    background: var(--bg-surface);
+    border-color: var(--border-strong);
+    box-shadow: none;
+    overflow: hidden;
+}
+
+.landing-stage .p-tile:nth-child(1) {
+    z-index: 1;
+    transform: translateY(20px);
+}
+
+.landing-stage .p-tile:nth-child(2) {
+    z-index: 2;
+    width: calc(100% + 18px);
+    margin-left: -9px;
+    transform: translateY(-2px);
+}
+
+.landing-stage .p-tile:nth-child(3) {
+    z-index: 1;
+    width: calc(100% + 9px);
+    margin-left: -9px;
+    transform: translateY(20px);
+}
+
+.landing-stage .tile-watermark-glyph,
+.landing-stage .tile-online-dot,
+.landing-stage .tile-footer-left {
+    display: none;
+}
+
+.landing-stage .tile-avatar {
+    width: clamp(52px, 6vw, 70px);
+    height: clamp(52px, 6vw, 70px);
+    font-size: clamp(21px, 2.2vw, 28px);
+    border-color: var(--border-strong);
+    background: var(--bg-surface-raised);
+    box-shadow: none;
+    animation-duration: 8s;
+    animation-iteration-count: infinite;
+    animation-timing-function: ease-in-out;
+}
+
+.landing-stage .p-tile:nth-child(1) .tile-avatar {
+    animation-name: landing-ring-hindi;
+}
+
+.landing-stage .p-tile:nth-child(2) .tile-avatar {
+    animation-name: landing-ring-tamil;
+}
+
+.landing-stage .p-tile:nth-child(3) .tile-avatar {
+    animation-name: landing-ring-kannada;
+}
+
+.landing-stage .tile-caption,
+.landing-stage .tile-caption.tile-caption-visible {
+    left: 6px;
+    right: 6px;
+    bottom: 50px;
+    display: flex;
+    opacity: 0;
+    transform: translateY(5px);
+    transition: none;
+    animation-duration: 8s;
+    animation-iteration-count: infinite;
+    animation-timing-function: ease-in-out;
+    animation-fill-mode: both;
+}
+
+.landing-stage .p-tile:nth-child(1) .tile-caption {
+    animation-name: landing-caption-hindi;
+}
+
+.landing-stage .p-tile:nth-child(2) .tile-caption {
+    animation-name: landing-caption-tamil;
+}
+
+.landing-stage .p-tile:nth-child(3) .tile-caption {
+    animation-name: landing-caption-kannada;
+}
+
+.landing-stage .tile-caption-text {
+    display: block;
+    max-width: 100%;
+    padding: 6px 5px;
+    border-radius: var(--radius-sm);
+    font-size: clamp(10px, 1vw, 12px);
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.landing-stage .tile-caption-gloss {
+    display: block;
+    margin-top: 3px;
+    color: var(--text-secondary);
+    font-size: 10px;
+    line-height: 1.35;
+}
+
+.landing-stage .tile-footer {
+    position: relative;
+    z-index: 3;
+    justify-content: center;
+    padding-top: 0;
+}
+
+.landing-stage .tile-lang-chip {
+    justify-content: center;
+    max-width: 100%;
+    gap: 4px;
+    padding: 3px 6px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface-raised);
+}
+
+.landing-stage .tile-lang-native {
+    font-family: var(--font-family);
+    font-size: 12px;
+}
+
+.landing-stage .tile-lang-en {
+    color: var(--text-secondary);
+    font-size: 10px;
+}
+
+.landing-stage-playing {
+    position: relative;
+    z-index: 2;
+    min-height: 24px;
+    margin-top: 24px;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .01em;
+    text-align: center;
+}
+
+.landing-stage-playing span {
+    position: absolute;
+    inset: 0;
+    display: block;
+    opacity: 0;
+    animation-duration: 8s;
+    animation-iteration-count: infinite;
+    animation-timing-function: ease-in-out;
+}
+
+.landing-stage-playing .landing-playing-hi {
+    animation-name: landing-label-hindi;
+}
+
+.landing-stage-playing .landing-playing-ta {
+    animation-name: landing-label-tamil;
+}
+
+.landing-stage-playing .landing-playing-kn {
+    animation-name: landing-label-kannada;
+}
+
+@keyframes landing-ring-hindi {
+    0%, 3% { box-shadow: 0 0 0 2px var(--accent); }
+    12% { box-shadow: 0 0 0 4px var(--accent-border); }
+    30%, 33%, 100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@keyframes landing-ring-tamil {
+    0%, 32% { box-shadow: 0 0 0 0 transparent; }
+    35% { box-shadow: 0 0 0 2px var(--accent); }
+    45% { box-shadow: 0 0 0 4px var(--accent-border); }
+    63%, 66%, 100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@keyframes landing-ring-kannada {
+    0%, 65% { box-shadow: 0 0 0 0 transparent; }
+    68% { box-shadow: 0 0 0 2px var(--accent); }
+    78% { box-shadow: 0 0 0 4px var(--accent-border); }
+    96%, 100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@keyframes landing-caption-hindi {
+    0%, 3% { opacity: 0; transform: translateY(5px); }
+    6%, 27% { opacity: 1; transform: translateY(0); }
+    31%, 100% { opacity: 0; transform: translateY(5px); }
+}
+
+@keyframes landing-caption-tamil {
+    0%, 32% { opacity: 0; transform: translateY(5px); }
+    36%, 60% { opacity: 1; transform: translateY(0); }
+    64%, 100% { opacity: 0; transform: translateY(5px); }
+}
+
+@keyframes landing-caption-kannada {
+    0%, 65% { opacity: 0; transform: translateY(5px); }
+    69%, 93% { opacity: 1; transform: translateY(0); }
+    97%, 100% { opacity: 0; transform: translateY(5px); }
+}
+
+@keyframes landing-label-hindi {
+    0%, 3% { opacity: 0; }
+    6%, 27% { opacity: 1; }
+    31%, 100% { opacity: 0; }
+}
+
+@keyframes landing-label-tamil {
+    0%, 32% { opacity: 0; }
+    36%, 60% { opacity: 1; }
+    64%, 100% { opacity: 0; }
+}
+
+@keyframes landing-label-kannada {
+    0%, 65% { opacity: 0; }
+    69%, 93% { opacity: 1; }
+    97%, 100% { opacity: 0; }
+}
+
+@media (max-width: 1024px) {
+    .landing-hero {
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        gap: 24px;
+        padding-top: 88px;
+    }
+
+    .landing-hero-copy {
+        grid-column: 1 / span 5;
+    }
+
+    .landing-stage {
+        grid-column: 6 / span 7;
+    }
+
+    .landing-stage .p-tile {
+        min-height: 180px;
+    }
+}
+
+@media (max-width: 640px) {
+    .landing-hero {
+        grid-template-columns: 1fr;
+        gap: 28px;
+        padding: 72px 0 64px;
+    }
+
+    .landing-hero-copy,
+    .landing-stage {
+        grid-column: 1;
+    }
+
+    .landing-hero h1 {
+        max-width: 560px;
+        font-size: clamp(3.25rem, 15vw, 4.6rem);
+        line-height: 1.02;
+    }
+
+    .landing-hero-subline {
+        margin-top: 22px;
+        font-size: 16px;
+    }
+
+    .landing-hero-actions {
+        margin-top: 24px;
+    }
+
+    .landing-stage {
+        padding-top: 10px;
+    }
+
+    .landing-stage .stage-tiles-container {
+        min-height: 0;
+    }
+
+    .landing-stage .p-tile {
+        min-height: 168px;
+        aspect-ratio: 4 / 5;
+        padding: 8px;
+    }
+
+    .landing-stage .tile-caption {
+        bottom: 48px;
+    }
+
+    .landing-stage .tile-lang-en {
+        display: none;
+    }
+}
+
+@media (max-width: 420px) {
+    .landing-stage .participant-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        row-gap: 0;
+    }
+
+    .landing-stage .p-tile:nth-child(1) {
+        transform: translateY(10px);
+    }
+
+    .landing-stage .p-tile:nth-child(2) {
+        width: calc(100% + 10px);
+        margin-left: -10px;
+        transform: translateY(-2px);
+    }
+
+    .landing-stage .p-tile:nth-child(3) {
+        grid-column: 1 / -1;
+        width: 58%;
+        margin: -8px auto 0;
+        transform: translateY(-4px);
+    }
+
+    .landing-stage .tile-lang-en {
+        display: inline;
+    }
+
+    .landing-stage .tile-caption-text {
+        font-size: 11px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .landing-stage .tile-avatar,
+    .landing-stage .tile-caption,
+    .landing-stage-playing span {
+        animation: none !important;
+        transition: none !important;
+    }
+
+    .landing-stage .p-tile:nth-child(1) .tile-avatar,
+    .landing-stage .p-tile:nth-child(2) .tile-avatar {
+        box-shadow: none;
+    }
+
+    .landing-stage .p-tile:nth-child(3) .tile-avatar {
+        box-shadow: 0 0 0 2px var(--accent);
+    }
+
+    .landing-stage .p-tile:nth-child(1) .tile-caption,
+    .landing-stage .p-tile:nth-child(2) .tile-caption {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
+    .landing-stage .p-tile:nth-child(3) .tile-caption {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    .landing-stage-playing .landing-playing-hi,
+    .landing-stage-playing .landing-playing-ta {
+        display: none;
+    }
+
+    .landing-stage-playing .landing-playing-kn {
+        opacity: 1;
+    }
+}

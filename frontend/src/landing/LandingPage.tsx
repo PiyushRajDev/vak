@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Wordmark from "../components/Wordmark";
+import LandingHeroStage from "./LandingHeroStage";
 import "./LandingPage.css";
 
 type LandingPageProps = {
@@ -60,7 +61,29 @@ export default function LandingPage({
                 </div>
             </nav>
 
-            <div className="landing-content" />
+            <section className="landing-hero" aria-labelledby="landing-hero-title">
+                <div className="landing-hero-copy">
+                    <h1 id="landing-hero-title">
+                        Speak your language.<br />
+                        Hear theirs.
+                    </h1>
+                    <p className="landing-hero-subline">
+                        Real-time conversations across Indian languages.
+                    </p>
+                    <div className="landing-hero-actions">
+                        <button type="button" className="btn btn-primary" onClick={onCreateRoom}>
+                            Create a room
+                        </button>
+                        <button type="button" className="btn btn-ghost" onClick={onJoinRoom}>
+                            Join with a code
+                        </button>
+                    </div>
+                    <p className="landing-hero-note">
+                        No sign-up. Runs in your browser. Headphones recommended.
+                    </p>
+                </div>
+                <LandingHeroStage />
+            </section>
 
             <footer className="landing-footer">
                 <Wordmark size="sm" />
