@@ -1,10 +1,50 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LANGUAGES, getLanguage } from "../languages";
 import Wordmark from "./Wordmark";
 import LanguagePicker from "./LanguagePicker";
 
 const API_BASE_URL =
     import.meta.env.VITE_API_BASE_URL ?? "";
+
+// Real phrases translated through Vāk's Sarvam pipeline
+const HERO_PHRASES = [
+    {
+        speaker: "Priya",
+        initial: "प",
+        nativeLang: "हिन्दी",
+        englishLang: "Hindi",
+        originalText: "कल कॉलेज आ रहे हो?",
+        translations: [
+            { nativeLang: "தமிழ்", englishLang: "Tamil", text: "நாளைக்கு நீ காலேஜுக்கு போறியா?" },
+            { nativeLang: "ಕನ್ನಡ", englishLang: "Kannada", text: "ನೀನು ನಾಳೆ ಕಾಲೇಜಿಗೆ ಹೋಗುತ್ತೀಯಾ?" },
+            { nativeLang: "తెలుగు", englishLang: "Telugu", text: "రేపు మీరు కాలేజీలో ఉంటారా?" },
+        ],
+    },
+    {
+        speaker: "Karthik",
+        initial: "க",
+        nativeLang: "தமிழ்",
+        englishLang: "Tamil",
+        originalText: "நாளைக்கு மீட்டிங் இருக்கா?",
+        translations: [
+            { nativeLang: "हिन्दी", englishLang: "Hindi", text: "क्या कल कोई मीटिंग है?" },
+            { nativeLang: "ಕನ್ನಡ", englishLang: "Kannada", text: "ನಾಳೆ ಸಭೆ ಇದೆಯೇ?" },
+            { nativeLang: "తెలుగు", englishLang: "Telugu", text: "రేపు సమావేశం ఉందా?" },
+        ],
+    },
+    {
+        speaker: "Ananya",
+        initial: "ಅ",
+        nativeLang: "ಕನ್ನಡ",
+        englishLang: "Kannada",
+        originalText: "ನಾಳೆ ನಾವು ಯಾವಾಗ ಭೇಟಿಯಾಗೋಣ?",
+        translations: [
+            { nativeLang: "हिन्दी", englishLang: "Hindi", text: "हम कल कब मिलेंगे?" },
+            { nativeLang: "தமிழ்", englishLang: "Tamil", text: "நாளைக்கு நாம் எப்போது சந்திக்கலாம்?" },
+            { nativeLang: "తెలుగు", englishLang: "Telugu", text: "రేపు మనం ఎప్పుడు కలుద్దాం?" },
+        ],
+    },
+];
 
 export type RoomSession = {
     roomCode: string;
@@ -143,6 +183,19 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
         setError("");
         setMicError("");
     }
+
+    // Hero phrase rotation
+    const [phraseIndex, setPhraseIndex] = useState(0);
+
+    useEffect(() => {
+        if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            return;
+        }
+        const timer = setInterval(() => {
+            setPhraseIndex(prev => (prev + 1) % HERO_PHRASES.length);
+        }, 5000);
+        return () => clearInterval(timer);
+    }, []);
 
     async function handleCopyCode(code: string) {
         try {
@@ -729,52 +782,51 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                     </button>
                 </div>
 
-                {/* Translation moment card — pure HTML/CSS visual */}
-                <div className="hero-card">
-                    <div className="hero-card-inner">
-                        {/* Speaker tile */}
-                        <div className="card-speaker-tile">
-                            <div className="card-avatar speaking-ring" aria-hidden="true">
-                                प
-                            </div>
-                            <div className="card-speaker-info">
-                                <span className="card-speaker-name">Priya</span>
-                                <span className="card-lang-chip">
-                                    हिन्दी <span className="lang-en-sm">Hindi</span>
-                                </span>
+                {/* Translation moment card — pure HTML/CSS visual with genuine output */}
+                {(() => {
+                    const activePhrase = HERO_PHRASES[phraseIndex];
+                    return (
+                        <div className="hero-card" aria-label="Live translation preview">
+                            <div className="hero-card-inner">
+                                {/* Speaker tile */}
+                                <div className="card-speaker-tile">
+                                    <div className="card-avatar speaking-ring" aria-hidden="true">
+                                        {activePhrase.initial}
+                                    </div>
+                                    <div className="card-speaker-info">
+                                        <span className="card-speaker-name">{activePhrase.speaker}</span>
+                                        <span className="card-lang-chip">
+                                            {activePhrase.nativeLang} <span className="lang-en-sm">{activePhrase.englishLang}</span>
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* The original phrase */}
+                                <p className="card-phrase-original">{activePhrase.originalText}</p>
+
+                                {/* Translation states in other scripts */}
+                                <div className="card-translations">
+                                    {activePhrase.translations.map((trans, i) => (
+                                        <div key={i} className="card-trans-row">
+                                            <span className="card-lang-chip-sm">
+                                                {trans.nativeLang} <span className="lang-en-sm">{trans.englishLang}</span>
+                                            </span>
+                                            <span className="card-trans-text">
+                                                {trans.text}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Playing indicator */}
+                                <div className="card-playing-pill">
+                                    <span className="playing-dot" aria-hidden="true" />
+                                    Playing translation
+                                </div>
                             </div>
                         </div>
-
-                        {/* The original phrase */}
-                        <p className="card-phrase-original">कल कॉलेज आ रहे हो?</p>
-
-                        {/* Translation states */}
-                        <div className="card-translations">
-                            <div className="card-trans-row">
-                                <span className="card-lang-chip-sm">
-                                    தமிழ் <span className="lang-en-sm">Tamil</span>
-                                </span>
-                                <span className="card-trans-text">
-                                    [NEEDS_REVIEW: Tamil translation]
-                                </span>
-                            </div>
-                            <div className="card-trans-row">
-                                <span className="card-lang-chip-sm">
-                                    ಕನ್ನಡ <span className="lang-en-sm">Kannada</span>
-                                </span>
-                                <span className="card-trans-text">
-                                    [NEEDS_REVIEW: Kannada translation]
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Playing indicator */}
-                        <div className="card-playing-pill">
-                            <span className="playing-dot" aria-hidden="true" />
-                            Playing translation
-                        </div>
-                    </div>
-                </div>
+                    );
+                })()}
             </section>
 
             <section className="how-it-works">
@@ -813,7 +865,7 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
                     <span className="pipe-arrow" aria-hidden="true">→</span>
                     <span className="pipe-step">📝 Text (Prisma STT)</span>
                     <span className="pipe-arrow" aria-hidden="true">→</span>
-                    <span className="pipe-step">🌐 Translation</span>
+                    <span className="pipe-step">🌐 Translation (Sarvam AI)</span>
                     <span className="pipe-arrow" aria-hidden="true">→</span>
                     <span className="pipe-step">🔊 Speech (Timbre TTS)</span>
                 </div>
