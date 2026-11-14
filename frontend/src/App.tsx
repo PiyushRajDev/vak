@@ -1,7 +1,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
-import "./vak-theme.css";
 import RoomLobby, { type RoomSession } from "./components/RoomLobby";
 import RoomPresence from "./components/RoomPresence";
 import { LANGUAGES } from "./languages";
