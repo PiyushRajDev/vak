@@ -46,7 +46,9 @@ export default function ControlDock({
             {/* 1. Mic Button / Mic Blocked Pill */}
             {micError ? (
                 <div className="dock-mic-error-pill">
-                    <span className="dock-error-text">Mic blocked</span>
+                    <span className="dock-error-text" title={micError || undefined}>
+                        {micError || "Mic blocked"}
+                    </span>
                     <button
                         type="button"
                         className="btn btn-primary btn-sm dock-retry-btn"
