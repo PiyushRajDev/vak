@@ -576,6 +576,10 @@ body {
     font-weight: 600;
 }
 
+.landing-preview-dock .pair-preferred-highlight {
+    color: var(--text-primary);
+}
+
 .landing-preview-dock .dock-mic-label::after {
     content: "";
     display: inline-block;
@@ -1339,6 +1343,12 @@ body {
 
     .landing-stage .tile-name {
         font-size: 11px;
+    }
+
+    .landing-stage .tile-footer {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
     }
 
     .landing-stage .tile-lang-chip {
