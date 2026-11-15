@@ -104,8 +104,8 @@ export default function LandingPage({
             <section className="landing-hero" aria-labelledby="landing-hero-title">
                 <div className="landing-hero-copy">
                     <h1 id="landing-hero-title">
-                        Speak your language.<br />
-                        Hear theirs.
+                        One room.
+                        <span>Every language.</span>
                     </h1>
                     <p className="landing-hero-subline">
                         Real-time conversations across Indian languages.
