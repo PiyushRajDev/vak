@@ -540,6 +540,11 @@
     font-size: 11px;
 }
 
+.landing-preview-dock .dock-btn:disabled {
+    opacity: 1;
+    cursor: default;
+}
+
 .landing-preview-dock .dock-btn-mic {
     padding-inline: 10px;
 }
