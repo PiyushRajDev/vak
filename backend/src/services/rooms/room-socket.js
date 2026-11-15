@@ -90,7 +90,7 @@ export function attachRoomSocket(server) {
         let stopTimer = null;
         const processedUtterances = new Set();
         let lastAudioNotReadyNoticeAt = 0;
-        let lastAudioBackpressureNoticeAt = 0;
+        let audioBackpressureActive = false;
 
         const authTimer = setTimeout(() => {
             sendJson(client, {
@@ -558,15 +558,21 @@ export function attachRoomSocket(server) {
                 }
 
                 if (sttSocket.bufferedAmount > MAX_AUDIO_BUFFERED_BYTES) {
-                    const now = Date.now();
-                    if (now - lastAudioBackpressureNoticeAt >= 2000) {
-                        lastAudioBackpressureNoticeAt = now;
+                    if (!audioBackpressureActive) {
+                        audioBackpressureActive = true;
                         sendJson(client, {
                             type: "audio_backpressure",
                             message: "Speech service is receiving audio too slowly",
                         });
                     }
                     return;
+                }
+
+                if (audioBackpressureActive) {
+                    audioBackpressureActive = false;
+                    sendJson(client, {
+                        type: "audio_flow_resumed",
+                    });
                 }
 
                 sttSocket.send(raw, { binary: true });
