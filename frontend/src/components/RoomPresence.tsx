@@ -7,7 +7,7 @@ import {
 } from "react";
 import ControlDock from "./ControlDock";
 import ConversationFeed, { type ConversationMessage } from "./ConversationFeed";
-import DiagnosticsDrawer, { type MicDiagnostics } from "./DiagnosticsDrawer";
+import DiagnosticsDrawer, { type MicDiagnostics, type MicInputDevice } from "./DiagnosticsDrawer";
 import ParticipantTiles, { type CaptionEntry } from "./ParticipantTiles";
 import RoomHeader, { type ConnectionState } from "./RoomHeader";
 import StatusLine from "./StatusLine";
@@ -241,6 +241,8 @@ export default function RoomPresence({
     });
     const micFramesSentRef = useRef(0);
     const lastMicLogAtRef = useRef(0);
+    const [micDevices, setMicDevices] = useState<MicInputDevice[]>([]);
+    const [selectedMicDeviceId, setSelectedMicDeviceId] = useState("");
 
     // Live Captions on Tile (Signature feature: fades after 4s)
     const [captionMap, setCaptionMap] = useState<Record<string, CaptionEntry>>(() => {
@@ -489,6 +491,16 @@ export default function RoomPresence({
             micFramesSentRef.current = 0;
             const primaryTrack = audioTracks[0];
             const initialTrackSettings = primaryTrack.getSettings();
+            const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+            setMicDevices(
+                devices
+                    .filter(device => device.kind === "audioinput")
+                    .map((device, index) => ({
+                        deviceId: device.deviceId,
+                        label: device.label || `Microphone ${index + 1}`,
+                    }))
+            );
+            setSelectedMicDeviceId(initialTrackSettings.deviceId || "");
             setMicDiagnostics({
                 inputLabel: primaryTrack.label || "Browser default microphone",
                 trackState: primaryTrack.readyState,
@@ -686,6 +698,63 @@ export default function RoomPresence({
             throw err;
         }
     }, [stopMicrophone, initialMicStream]);
+
+    const handleMicrophoneDeviceChange = useCallback(async (deviceId: string) => {
+        if (
+            deviceId === selectedMicDeviceId ||
+            !navigator.mediaDevices?.getUserMedia
+        ) {
+            return;
+        }
+
+        const shouldResumeAudio = audioReadyRef.current;
+        audioReadyRef.current = false;
+        setMicError("Switching microphone input…");
+
+        try {
+            await stopMicrophone();
+
+            const audioConstraints: MediaTrackConstraints = {
+                channelCount: 1,
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+            };
+
+            if (deviceId) {
+                audioConstraints.deviceId = { exact: deviceId };
+            }
+
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: audioConstraints,
+                video: false,
+            });
+
+            micStreamRef.current = stream;
+            await startMicrophone();
+
+            setSelectedMicDeviceId(deviceId);
+            audioReadyRef.current = shouldResumeAudio;
+            setMicError(null);
+
+            const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+            setMicDevices(
+                devices
+                    .filter(device => device.kind === "audioinput")
+                    .map((device, index) => ({
+                        deviceId: device.deviceId,
+                        label: device.label || `Microphone ${index + 1}`,
+                    }))
+            );
+        } catch (error) {
+            audioReadyRef.current = false;
+            const message = error instanceof Error
+                ? error.message
+                : "Could not switch microphone input.";
+            console.error("Microphone device switch failed:", error);
+            setMicError(message);
+        }
+    }, [selectedMicDeviceId, startMicrophone, stopMicrophone]);
 
     // Recover from a device unplug, OS-level input interruption, or worklet
     // failure without requiring the participant to leave and rejoin.
@@ -2061,6 +2130,9 @@ export default function RoomPresence({
                 playbackContextState={playbackContextRef.current?.state}
                 micContextState={micContextRef.current?.state ?? "not-started"}
                 micDiagnostics={micDiagnostics}
+                micDevices={micDevices}
+                selectedMicDeviceId={selectedMicDeviceId}
+                onSelectMicDevice={handleMicrophoneDeviceChange}
             />
         </div>
     );
