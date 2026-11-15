@@ -341,6 +341,15 @@ export default function RoomPresence({
         useRef<AudioWorkletNode | null>(null);
 
     const micGainRef = useRef<GainNode | null>(null);
+    const micWorkletContextRef = useRef<AudioContext | null>(null);
+    const micContextStateHandlerRef = useRef<(() => void) | null>(null);
+    const micRecoveryTimerRef = useRef<number | null>(null);
+    const micRecoveryRef = useRef<() => void>(() => {});
+    const sttStartInFlightRef = useRef(false);
+    const sttReconnectTimerRef = useRef<number | null>(null);
+    const sttReconnectAttemptsRef = useRef(0);
+    const startAudioSessionRef = useRef<() => void>(() => {});
+    const scheduleSttReconnectRef = useRef<() => void>(() => {});
 
     // STT.
     const audioReadyRef = useRef(false);
@@ -377,11 +386,14 @@ export default function RoomPresence({
     // --------------------------------------------------
 
     const stopMicrophone = useCallback(async () => {
+        // Disable frame forwarding before stopping tracks. This also prevents
+        // an intentional stop from being mistaken for a device disconnect.
         audioReadyRef.current = false;
 
         micSourceRef.current?.disconnect();
         micSourceRef.current = null;
 
+        micProcessorRef.current?.port.close();
         micProcessorRef.current?.disconnect();
         micProcessorRef.current = null;
 
@@ -397,7 +409,21 @@ export default function RoomPresence({
         const context = micContextRef.current;
         micContextRef.current = null;
 
-        if (context && context.state !== "closed") {
+        if (context && micContextStateHandlerRef.current) {
+            context.removeEventListener(
+                "statechange",
+                micContextStateHandlerRef.current
+            );
+        }
+        micContextStateHandlerRef.current = null;
+
+        // RoomLobby already unlocks this context during the user's join
+        // gesture. Keep it alive for TTS playback when the mic is muted.
+        if (
+            context &&
+            context !== playbackContextRef.current &&
+            context.state !== "closed"
+        ) {
             await context.close();
         }
     }, []);
@@ -408,10 +434,16 @@ export default function RoomPresence({
 
     const startMicrophone = useCallback(async () => {
         try {
-            // 1. Get or reuse microphone stream.
+            // Reuse the stream granted by the lobby whenever it is still live.
             let stream = micStreamRef.current;
             if (!stream || !stream.active) {
-                if (initialMicStream && initialMicStream.active) {
+                const reusableInitialStream =
+                    initialMicStream?.active &&
+                    initialMicStream.getAudioTracks().some(
+                        track => track.readyState === "live"
+                    );
+
+                if (reusableInitialStream) {
                     stream = initialMicStream;
                 } else if (navigator.mediaDevices?.getUserMedia) {
                     stream = await navigator.mediaDevices.getUserMedia({
@@ -429,43 +461,82 @@ export default function RoomPresence({
             }
 
             micStreamRef.current = stream;
-            // Activate microphone only after STT is ready.
-            const audioTracks = stream.getAudioTracks();
 
+            const audioTracks = stream.getAudioTracks();
             if (audioTracks.length === 0) {
-                    throw new Error("No microphone audio track available.");
-                }
+                throw new Error("No microphone audio track is available.");
+            }
 
             audioTracks.forEach(track => {
-                    if (track.readyState !== "live") {
-                        throw new Error("Microphone track is no longer live.");
-                    }
+                if (track.readyState !== "live") {
+                    throw new Error("The microphone track is no longer live.");
+                }
 
-                    track.enabled = true;
+                track.enabled = true;
+
+                track.addEventListener("ended", () => {
+                    if (audioReadyRef.current && !isMutedRef.current) {
+                        micRecoveryRef.current();
+                    }
+                }, { once: true });
+
+                track.addEventListener("mute", () => {
+                    if (audioReadyRef.current && !isMutedRef.current) {
+                        setMicError("Microphone input was interrupted. Checking the device…");
+                    }
                 });
 
-            // 2. Create 16 kHz audio context.
-            const context = new AudioContext({
-                sampleRate: 16000,
+                track.addEventListener("unmute", () => {
+                    if (!isMutedRef.current) {
+                        setMicError(null);
+                    }
+                });
             });
+
+            // Use the context unlocked by the lobby. Forcing a second 16 kHz
+            // context fails on some browser/device combinations; the worklet
+            // now resamples this context's native rate to the STT's 16 kHz.
+            let context = playbackContextRef.current;
+            if (!context || context.state === "closed") {
+                context = new AudioContext();
+                playbackContextRef.current = context;
+            }
 
             micContextRef.current = context;
 
-            await context.resume();
-
-            if (context.sampleRate !== 16000) {
-                throw new Error(
-                    `Expected 16000 Hz audio, got ${context.sampleRate} Hz`
-                );
+            if (context.state === "suspended") {
+                await context.resume();
+            }
+            if (context.state !== "running") {
+                throw new Error("Audio capture could not start. Tap the microphone to retry.");
             }
 
-            // 3. Load PCM conversion worklet.
-            await context.audioWorklet.addModule("/pcm-worklet.js");
+            const handleContextStateChange = () => {
+                if (
+                    context.state === "suspended" &&
+                    audioReadyRef.current &&
+                    !isMutedRef.current
+                ) {
+                    void context.resume().catch(error => {
+                        console.warn("Could not resume microphone AudioContext:", error);
+                        setMicError("Audio capture was suspended. Tap the microphone to resume.");
+                    });
+                }
+            };
+
+            context.addEventListener("statechange", handleContextStateChange);
+            micContextStateHandlerRef.current = handleContextStateChange;
+
+            // The worklet is registered once per AudioContext. The same
+            // playback context is reused across mute/unmute cycles.
+            if (micWorkletContextRef.current !== context) {
+                await context.audioWorklet.addModule("/pcm-worklet.js");
+                micWorkletContextRef.current = context;
+            }
 
             const source = context.createMediaStreamSource(stream);
             micSourceRef.current = source;
 
-            // 4. Create PCM processor.
             const processor = new AudioWorkletNode(
                 context,
                 "pcm16-processor",
@@ -478,13 +549,13 @@ export default function RoomPresence({
 
             micProcessorRef.current = processor;
 
-            // 5. Keep audio graph alive without microphone feedback.
-            const gain = context.createGain();
-            gain.gain.value = 0;
+            processor.addEventListener("processorerror", () => {
+                if (audioReadyRef.current && !isMutedRef.current) {
+                    setMicError("Microphone processing stopped. Reconnecting…");
+                    micRecoveryRef.current();
+                }
+            });
 
-            micGainRef.current = gain;
-
-            // 6. Forward microphone PCM to the room WebSocket (with Echo Prevention).
             processor.port.onmessage = (
                 event: MessageEvent<ArrayBuffer>
             ) => {
@@ -505,14 +576,18 @@ export default function RoomPresence({
                         "Unexpected PCM frame size:",
                         event.data.byteLength
                     );
-
                     return;
                 }
 
                 socket.send(event.data);
             };
 
-            // 7. Connect audio graph.
+            // Keep the AudioWorklet alive without feeding mic audio back to
+            // the speakers. TTS nodes share this same AudioContext.
+            const gain = context.createGain();
+            gain.gain.value = 0;
+            micGainRef.current = gain;
+
             source.connect(processor);
             processor.connect(gain);
             gain.connect(context.destination);
@@ -523,6 +598,46 @@ export default function RoomPresence({
         }
     }, [stopMicrophone, initialMicStream]);
 
+    // Recover from a device unplug, OS-level input interruption, or worklet
+    // failure without requiring the participant to leave and rejoin.
+    micRecoveryRef.current = () => {
+        if (
+            micRecoveryTimerRef.current !== null ||
+            isMutedRef.current ||
+            !audioReadyRef.current
+        ) {
+            return;
+        }
+
+        audioReadyRef.current = false;
+        setMicError("Microphone disconnected. Reconnecting…");
+
+        micRecoveryTimerRef.current = window.setTimeout(() => {
+            micRecoveryTimerRef.current = null;
+
+            void (async () => {
+                await stopMicrophone();
+
+                if (
+                    isMutedRef.current ||
+                    wsRef.current?.readyState !== WebSocket.OPEN
+                ) {
+                    return;
+                }
+
+                try {
+                    await startMicrophone();
+                    audioReadyRef.current = true;
+                    setMicError(null);
+                } catch (error) {
+                    console.error("Microphone recovery failed:", error);
+                    audioReadyRef.current = false;
+                    setMicError("Microphone unavailable. Reconnect it, then tap the microphone to retry.");
+                }
+            })();
+        }, 300);
+    };
+
     // --------------------------------------------------
     // AUDIO SESSION INITIALIZATION (MEET STYLE)
     // --------------------------------------------------
@@ -532,12 +647,13 @@ export default function RoomPresence({
 
         if (
             socket?.readyState !== WebSocket.OPEN ||
-            isStarting ||
+            sttStartInFlightRef.current ||
             isMutedRef.current
         ) {
             return;
         }
 
+        sttStartInFlightRef.current = true;
         setIsStarting(true);
         setMicError(null);
 
@@ -554,7 +670,7 @@ export default function RoomPresence({
 
                     reject(
                         new Error(
-                            "Timed out waiting for speech service."
+                            "Timed out waiting for the speech service."
                         )
                     );
                 }, 15000);
@@ -565,11 +681,39 @@ export default function RoomPresence({
             }));
 
             await readyPromise;
-            await startMicrophone();
+
+            // On a provider reconnect, capture may still be running. Reuse
+            // its graph instead of attaching a second source/processor.
+            const captureAlreadyRunning =
+                Boolean(
+                    micStreamRef.current?.active &&
+                    micSourceRef.current &&
+                    micProcessorRef.current &&
+                    micContextRef.current?.state === "running"
+                );
+
+            if (captureAlreadyRunning) {
+                micStreamRef.current
+                    ?.getAudioTracks()
+                    .forEach(track => {
+                        if (track.readyState === "live") {
+                            track.enabled = true;
+                        }
+                    });
+            } else {
+                await startMicrophone();
+            }
+
+            setMicError(null);
 
         } catch (err) {
+            const message =
+                err instanceof Error
+                    ? err.message
+                    : "Unable to start microphone audio.";
+
             console.error("Microphone session failed:", err);
-            setMicError("Mic blocked. Check your browser permission.");
+            setMicError(message);
 
             const currentSocket = wsRef.current;
             if (currentSocket?.readyState === WebSocket.OPEN) {
@@ -581,9 +725,46 @@ export default function RoomPresence({
             await stopMicrophone();
 
         } finally {
+            sttStartInFlightRef.current = false;
             setIsStarting(false);
         }
-    }, [isStarting, startMicrophone, stopMicrophone]);
+    }, [startMicrophone, stopMicrophone]);
+
+    startAudioSessionRef.current = () => {
+        void startAudioSession();
+    };
+
+    scheduleSttReconnectRef.current = () => {
+        if (
+            isMutedRef.current ||
+            sttReconnectTimerRef.current !== null
+        ) {
+            return;
+        }
+
+        if (sttReconnectAttemptsRef.current >= 5) {
+            setMicError("Speech service is unavailable. Tap the microphone to retry.");
+            return;
+        }
+
+        const delay = Math.min(
+            500 * Math.pow(2, sttReconnectAttemptsRef.current),
+            8000
+        );
+        sttReconnectAttemptsRef.current += 1;
+        setMicError("Speech connection lost. Reconnecting…");
+
+        sttReconnectTimerRef.current = window.setTimeout(() => {
+            sttReconnectTimerRef.current = null;
+
+            if (
+                !isMutedRef.current &&
+                wsRef.current?.readyState === WebSocket.OPEN
+            ) {
+                startAudioSessionRef.current();
+            }
+        }, delay);
+    };
 
     // --------------------------------------------------
     // MUTE / UNMUTE (MEET STYLE - STRICT BOOLEAN)
@@ -1221,7 +1402,13 @@ export default function RoomPresence({
                             sttStartTimeoutRef.current = null;
                         }
 
+                        if (sttReconnectTimerRef.current !== null) {
+                            window.clearTimeout(sttReconnectTimerRef.current);
+                            sttReconnectTimerRef.current = null;
+                        }
+                        sttReconnectAttemptsRef.current = 0;
                         audioReadyRef.current = true;
+                        setMicError(null);
 
                         const pending = pendingSttStartRef.current;
                         pendingSttStartRef.current = null;
@@ -1448,7 +1635,33 @@ export default function RoomPresence({
                         const messageText = message.message || "Microphone service error.";
                         audioReadyRef.current = false;
                         clearPendingStart(messageText);
-                        setMicError("Mic service unavailable. Try again.");
+                        if (!isMutedRef.current) {
+                            scheduleSttReconnectRef.current();
+                        }
+                        break;
+                    }
+
+                    case "stt_disconnected": {
+                        audioReadyRef.current = false;
+                        clearPendingStart("Speech service disconnected.");
+                        if (!isMutedRef.current) {
+                            scheduleSttReconnectRef.current();
+                        }
+                        break;
+                    }
+
+                    case "audio_not_ready": {
+                        audioReadyRef.current = false;
+                        clearPendingStart("Speech service is not ready.");
+                        if (!isMutedRef.current) {
+                            scheduleSttReconnectRef.current();
+                        }
+                        break;
+                    }
+
+                    case "audio_backpressure": {
+                        console.warn("Room audio backpressure:", message.message);
+                        setMicError("Network congestion is delaying microphone audio.");
                         break;
                     }
 
@@ -1503,6 +1716,11 @@ export default function RoomPresence({
 
                 audioReadyRef.current = false;
 
+                if (sttReconnectTimerRef.current !== null) {
+                    window.clearTimeout(sttReconnectTimerRef.current);
+                    sttReconnectTimerRef.current = null;
+                }
+
                 clearPendingStart("Room connection closed.");
 
                 void stopMicrophone();
@@ -1542,6 +1760,15 @@ export default function RoomPresence({
 
         return () => {
             disposed = true;
+
+            if (sttReconnectTimerRef.current !== null) {
+                window.clearTimeout(sttReconnectTimerRef.current);
+                sttReconnectTimerRef.current = null;
+            }
+            if (micRecoveryTimerRef.current !== null) {
+                window.clearTimeout(micRecoveryTimerRef.current);
+                micRecoveryTimerRef.current = null;
+            }
 
             if (reconnectTimerRef.current !== null) {
                 window.clearTimeout(reconnectTimerRef.current);
