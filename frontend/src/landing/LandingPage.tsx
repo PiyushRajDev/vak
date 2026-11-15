@@ -210,11 +210,12 @@ export default function LandingPage({
 
                 <div className="landing-language-wall" aria-label="Supported languages">
                     {LANGUAGES.map(language => (
-                        <button
-                            type="button"
+                        <div
                             className="landing-language-tile"
                             key={language.code}
                             lang={language.code}
+                            role="group"
+                            tabIndex={0}
                             aria-label={`${language.nativeName}, ${language.englishName}`}
                             title={language.englishName}
                         >
@@ -224,7 +225,7 @@ export default function LandingPage({
                             <span className="landing-language-english" aria-hidden="true">
                                 {language.englishName}
                             </span>
-                        </button>
+                        </div>
                     ))}
                 </div>
             </section>

@@ -2,7 +2,7 @@ import ParticipantTiles, {
     type CaptionEntry,
     type ParticipantTileInfo,
 } from "../components/ParticipantTiles";
-import { getScriptGlyph } from "../languages";
+import { getLanguage, getScriptGlyph } from "../languages";
 import {
     LANDING_SENTENCE_EN,
     LANDING_STAGE_LANGUAGES,
@@ -57,7 +57,7 @@ const CAPTIONS: Record<string, CaptionEntry> = {
 
 export default function LandingHeroStage() {
     const languageFor = (code: typeof LANDING_STAGE_LANGUAGES[number]) =>
-        code === "hi-IN" ? "Hindi" : code === "ta-IN" ? "Tamil" : "Kannada";
+        getLanguage(code).englishName;
 
     return (
         <div

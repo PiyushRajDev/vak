@@ -219,7 +219,7 @@
 
 .landing-hero-note {
     margin: 18px 0 0;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 12px;
     line-height: 1.6;
 }
@@ -416,10 +416,11 @@
     position: absolute;
     inset: 0;
     display: block;
-    opacity: 0;
+    opacity: 1;
+    visibility: hidden;
     animation-duration: 8s;
     animation-iteration-count: infinite;
-    animation-timing-function: ease-in-out;
+    animation-timing-function: steps(1, end);
 }
 
 .landing-stage-playing .landing-playing-hi {
@@ -473,21 +474,19 @@
 }
 
 @keyframes landing-label-hindi {
-    0%, 3% { opacity: 0; }
-    6%, 27% { opacity: 1; }
-    31%, 100% { opacity: 0; }
+    0%, 30% { visibility: visible; }
+    31%, 100% { visibility: hidden; }
 }
 
 @keyframes landing-label-tamil {
-    0%, 32% { opacity: 0; }
-    36%, 60% { opacity: 1; }
-    64%, 100% { opacity: 0; }
+    0%, 31% { visibility: hidden; }
+    32%, 63% { visibility: visible; }
+    64%, 100% { visibility: hidden; }
 }
 
 @keyframes landing-label-kannada {
-    0%, 65% { opacity: 0; }
-    69%, 93% { opacity: 1; }
-    97%, 100% { opacity: 0; }
+    0%, 64% { visibility: hidden; }
+    65%, 100% { visibility: visible; }
 }
 
 @media (max-width: 1024px) {
@@ -622,11 +621,11 @@
 
     .landing-stage-playing .landing-playing-hi,
     .landing-stage-playing .landing-playing-ta {
-        display: none;
+        visibility: hidden;
     }
 
     .landing-stage-playing .landing-playing-kn {
-        opacity: 1;
+        visibility: visible;
     }
 }
 
@@ -711,7 +710,7 @@
 }
 
 .landing-script-chip span:last-child {
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 10px;
 }
 
@@ -772,7 +771,7 @@
 
 .landing-step-number {
     margin-bottom: 10px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-family: var(--font-mono);
     font-size: 11px;
     letter-spacing: .08em;
@@ -1181,7 +1180,7 @@
 }
 
 .landing-pipeline-arrow {
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 18px;
     line-height: 1;
 }
@@ -1222,3 +1221,17 @@
         transform-origin: center;
     }
 }
+
+
+/* Anchor targets sit below the sticky navigation. */
+.landing-page section[id] {
+    scroll-margin-top: 92px;
+}
+
+@media (min-width: 1280px) {
+    .landing-page {
+        width: 1200px;
+    }
+}
+
+/* Keep all essential small copy on the existing AA-passing secondary token. */
