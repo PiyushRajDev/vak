@@ -43,6 +43,7 @@ export const LANDING_PHRASE_SETS = [
     {
         sourceLanguage: "hi-IN",
         sourceText: LANDING_TRANSLATIONS["hi-IN"].text,
+        sourceReviewStatus: "UNVERIFIED",
         englishGloss: "Are you coming to college tomorrow?",
         targets: [
             {
@@ -60,6 +61,7 @@ export const LANDING_PHRASE_SETS = [
     {
         sourceLanguage: "hi-IN",
         sourceText: "मैं पाँच मिनट में पहुँचता हूँ।",
+        sourceReviewStatus: "UNVERIFIED",
         englishGloss: "I'll be there in five minutes.",
         targets: [
             {
