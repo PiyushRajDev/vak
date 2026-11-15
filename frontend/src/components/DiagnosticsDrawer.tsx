@@ -1,5 +1,19 @@
 import type { ConversationMessage } from "./ConversationFeed";
 
+export type MicDiagnostics = {
+    inputLabel: string;
+    trackState: string;
+    trackEnabled: boolean;
+    trackMuted: boolean;
+    deviceSampleRate?: number;
+    deviceChannelCount?: number;
+    contextSampleRate?: number;
+    inputChannels: number;
+    inputRms: number;
+    inputPeak: number;
+    framesSent: number;
+};
+
 type DiagnosticsDrawerProps = {
     isOpen: boolean;
     onClose: () => void;
@@ -10,6 +24,7 @@ type DiagnosticsDrawerProps = {
     messages: ConversationMessage[];
     playbackContextState?: string;
     micContextState?: string;
+    micDiagnostics: MicDiagnostics;
 };
 
 export default function DiagnosticsDrawer({
@@ -20,8 +35,9 @@ export default function DiagnosticsDrawer({
     spokenLanguage,
     preferredLanguage,
     messages,
-    playbackContextState = "running",
-    micContextState = "running",
+    playbackContextState = "not-started",
+    micContextState = "not-started",
+    micDiagnostics,
 }: DiagnosticsDrawerProps) {
     if (!isOpen) return null;
 
@@ -85,7 +101,49 @@ export default function DiagnosticsDrawer({
                             </div>
                             <div className="diag-stat">
                                 <span className="stat-label">Playback Context</span>
-                                <span className="stat-value stat-ok">{playbackContextState}</span>
+                                <span className="stat-value">{playbackContextState}</span>
+                            </div>
+                            <div className="diag-stat">
+                                <span className="stat-label">Microphone Input</span>
+                                <span className="stat-value">{micDiagnostics.inputLabel}</span>
+                            </div>
+                            <div className="diag-stat">
+                                <span className="stat-label">Mic Track</span>
+                                <span className="stat-value">
+                                    {micDiagnostics.trackState}
+                                    {" · "}
+                                    {micDiagnostics.trackEnabled ? "enabled" : "disabled"}
+                                    {" · "}
+                                    {micDiagnostics.trackMuted ? "muted" : "unmuted"}
+                                </span>
+                            </div>
+                            <div className="diag-stat">
+                                <span className="stat-label">Input / Context Rate</span>
+                                <span className="stat-value">
+                                    {micDiagnostics.deviceSampleRate ?? "?"}
+                                    {" / "}
+                                    {micDiagnostics.contextSampleRate ?? "?"} Hz
+                                </span>
+                            </div>
+                            <div className="diag-stat">
+                                <span className="stat-label">Input Channels</span>
+                                <span className="stat-value">
+                                    {micDiagnostics.deviceChannelCount ?? micDiagnostics.inputChannels}
+                                </span>
+                            </div>
+                            <div className="diag-stat">
+                                <span className="stat-label">Mic Level (RMS)</span>
+                                <span className="stat-value">
+                                    {micDiagnostics.inputRms > 0
+                                        ? (20 * Math.log10(micDiagnostics.inputRms)).toFixed(1) + " dBFS"
+                                        : "No signal"}
+                                    {" · peak "}
+                                    {micDiagnostics.inputPeak.toFixed(3)}
+                                </span>
+                            </div>
+                            <div className="diag-stat">
+                                <span className="stat-label">PCM Frames Sent</span>
+                                <span className="stat-value">{micDiagnostics.framesSent}</span>
                             </div>
                             {avgLatency !== null && (
                                 <div className="diag-stat">
