@@ -1,7 +1,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
-import "./vak-theme.css";
 import RoomLobby, { type RoomSession } from "./components/RoomLobby";
 import RoomPresence from "./components/RoomPresence";
 import { LANGUAGES } from "./languages";
@@ -628,7 +627,29 @@ function SingleUserDemo() {
 const API_BASE_URL =
     import.meta.env.VITE_API_BASE_URL ?? "";
 
+let backendPrewarmSent = false;
+
 function App() {
+    useEffect(() => {
+        if (backendPrewarmSent) return;
+
+        const backendUrl = import.meta.env.VITE_API_URL;
+        if (!backendUrl) return;
+
+        backendPrewarmSent = true;
+
+        let normalizedBackendUrl = backendUrl;
+        while (normalizedBackendUrl.endsWith("/")) {
+            normalizedBackendUrl = normalizedBackendUrl.slice(0, -1);
+        }
+
+        const healthUrl = normalizedBackendUrl + "/api/health";
+        void fetch(healthUrl, {
+            mode: "no-cors",
+            credentials: "omit",
+        }).catch(() => undefined);
+    }, []);
+
     const [roomSession, setRoomSession] =
         useState<RoomSession | null>(() => {
             if (typeof window === "undefined") return null;

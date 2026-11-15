@@ -1,50 +1,11 @@
-import { useEffect, useState } from "react";
-import { LANGUAGES, getLanguage } from "../languages";
+import { useState } from "react";
+import { getLanguage } from "../languages";
 import Wordmark from "./Wordmark";
 import LanguagePicker from "./LanguagePicker";
+import LandingPage from "../landing/LandingPage";
 
 const API_BASE_URL =
     import.meta.env.VITE_API_BASE_URL ?? "";
-
-// Real phrases translated through Vāk's Sarvam pipeline
-const HERO_PHRASES = [
-    {
-        speaker: "Priya",
-        initial: "प",
-        nativeLang: "हिन्दी",
-        englishLang: "Hindi",
-        originalText: "कल कॉलेज आ रहे हो?",
-        translations: [
-            { nativeLang: "தமிழ்", englishLang: "Tamil", text: "நாளைக்கு நீ காலேஜுக்கு போறியா?" },
-            { nativeLang: "ಕನ್ನಡ", englishLang: "Kannada", text: "ನೀನು ನಾಳೆ ಕಾಲೇಜಿಗೆ ಹೋಗುತ್ತೀಯಾ?" },
-            { nativeLang: "తెలుగు", englishLang: "Telugu", text: "రేపు మీరు కాలేజీలో ఉంటారా?" },
-        ],
-    },
-    {
-        speaker: "Karthik",
-        initial: "க",
-        nativeLang: "தமிழ்",
-        englishLang: "Tamil",
-        originalText: "நாளைக்கு மீட்டிங் இருக்கா?",
-        translations: [
-            { nativeLang: "हिन्दी", englishLang: "Hindi", text: "क्या कल कोई मीटिंग है?" },
-            { nativeLang: "ಕನ್ನಡ", englishLang: "Kannada", text: "ನಾಳೆ ಸಭೆ ಇದೆಯೇ?" },
-            { nativeLang: "తెలుగు", englishLang: "Telugu", text: "రేపు సమావేశం ఉందా?" },
-        ],
-    },
-    {
-        speaker: "Sneha",
-        initial: "ಅ",
-        nativeLang: "ಕನ್ನಡ",
-        englishLang: "Kannada",
-        originalText: "ನಾಳೆ ನಾವು ಯಾವಾಗ ಭೇಟಿಯಾಗೋಣ?",
-        translations: [
-            { nativeLang: "हिन्दी", englishLang: "Hindi", text: "हम कल कब मिलेंगे?" },
-            { nativeLang: "தமிழ்", englishLang: "Tamil", text: "நாளைக்கு நாம் எப்போது சந்திக்கலாம்?" },
-            { nativeLang: "తెలుగు", englishLang: "Telugu", text: "రేపు మనం ఎప్పుడు కలుద్దాం?" },
-        ],
-    },
-];
 
 export type RoomSession = {
     roomCode: string;
@@ -184,18 +145,6 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
         setMicError("");
     }
 
-    // Hero phrase rotation
-    const [phraseIndex, setPhraseIndex] = useState(0);
-
-    useEffect(() => {
-        if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-            return;
-        }
-        const timer = setInterval(() => {
-            setPhraseIndex(prev => (prev + 1) % HERO_PHRASES.length);
-        }, 5000);
-        return () => clearInterval(timer);
-    }, []);
 
     async function handleCopyCode(code: string) {
         try {
@@ -719,253 +668,16 @@ export default function RoomLobby({ onJoined }: RoomLobbyProps) {
         );
     }
 
-    // ==================================================
-    // RENDER: REDESIGNED LANDING VIEW
-    // ==================================================
-    const activePhrase = HERO_PHRASES[phraseIndex];
-
     return (
-        <main className="landing landing-v2">
-            <nav className="landing-nav" aria-label="Main navigation">
-                <Wordmark size="md" />
-                <div className="nav-actions">
-                    <button type="button" className="btn btn-ghost" onClick={() => { setView("join"); resetErrors(); }}>
-                        Join a room
-                    </button>
-                    <button type="button" className="btn btn-primary" onClick={() => { setView("create"); resetErrors(); }}>
-                        Create a room
-                    </button>
-                </div>
-            </nav>
-
-            <section className="v2-hero" aria-labelledby="v2-hero-title">
-                <div className="v2-hero-copy">
-                    <div className="v2-eyebrow">
-                        <span className="v2-live-dot" aria-hidden="true" />
-                        Live multilingual voice rooms
-                    </div>
-
-                    <h1 id="v2-hero-title">
-                        One room.
-                        <span>Every language.</span>
-                    </h1>
-
-                    <p>
-                        Bring everyone into the same conversation. Speak naturally
-                        in your language while Vāk translates and re-voices the
-                        conversation for every listener.
-                    </p>
-
-                    <div className="v2-hero-actions">
-                        <button
-                            type="button"
-                            className="btn btn-primary btn-lg"
-                            onClick={() => { setView("create"); resetErrors(); }}
-                        >
-                            Create a room
-                        </button>
-                        <button
-                            type="button"
-                            className="btn btn-ghost btn-lg"
-                            onClick={() => { setView("join"); resetErrors(); }}
-                        >
-                            Join with a code
-                        </button>
-                    </div>
-
-                    <div className="v2-proof-row" aria-label="Product capabilities">
-                        <span className="v2-proof-item">
-                            <span className="v2-proof-check" aria-hidden="true">✓</span>
-                            Shared voice conversations
-                        </span>
-                        <span className="v2-proof-item">
-                            <span className="v2-proof-check" aria-hidden="true">✓</span>
-                            Choose your listening language
-                        </span>
-                    </div>
-                </div>
-
-                <div className="v2-visual-shell">
-                    <div className="v2-preview-card" aria-label="Example of a multilingual conversation">
-                        <div className="v2-preview-top">
-                            <div className="v2-preview-brand">
-                                <span className="v2-preview-mark" aria-hidden="true">व</span>
-                                <span>VĀK <span style={{ color: "#7184A3", fontWeight: 500 }}>/ ROOM PREVIEW</span></span>
-                            </div>
-                            <span className="v2-live-label">
-                                <span className="v2-live-dot" aria-hidden="true" />
-                                Live preview
-                            </span>
-                        </div>
-
-                        <div className="v2-speaker-row">
-                            <div className="v2-speaker-avatar" aria-hidden="true">
-                                {activePhrase.initial}
-                            </div>
-                            <div className="v2-speaker-meta">
-                                <span className="v2-speaker-name">{activePhrase.speaker}</span>
-                                <span className="v2-speaker-language">
-                                    Speaking {activePhrase.englishLang} · {activePhrase.nativeLang}
-                                </span>
-                            </div>
-                            <div className="v2-waveform" aria-label="Audio activity">
-                                {Array.from({ length: 22 }, (_, index) => (
-                                    <span key={index} />
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="v2-message-label">
-                            <span>01</span>
-                            Original speech
-                        </div>
-                        <div className="v2-original-message" aria-live="polite">
-                            {activePhrase.originalText}
-                        </div>
-
-                        <div className="v2-message-label">
-                            <span>02</span>
-                            Heard in other languages
-                        </div>
-                        <div className="v2-translations">
-                            {activePhrase.translations.map((translation, index) => (
-                                <div
-                                    className="v2-translation-row"
-                                    key={translation.englishLang + "-" + index}
-                                >
-                                    <div className="v2-translation-lang">
-                                        <strong>{translation.nativeLang}</strong>
-                                        <span>{translation.englishLang}</span>
-                                    </div>
-                                    <span className="v2-translation-text">
-                                        {translation.text}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-
-                        <div className="v2-voice-footer">
-                            <span className="v2-voice-icon" aria-hidden="true">♫</span>
-                            <span className="v2-voice-copy">
-                                <strong>Translated voice</strong>
-                                <span>Speech, translated and spoken aloud</span>
-                            </span>
-                            <span className="v2-voice-state">AUDIO ACTIVE</span>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <section className="v2-language-band" aria-labelledby="v2-language-title">
-                <h2 className="v2-language-heading" id="v2-language-title">
-                    Speak in the language that feels like yours
-                </h2>
-                <div className="v2-language-grid">
-                    {LANGUAGES.map(language => (
-                        <span className="v2-language-chip" key={language.code}>
-                            {language.nativeName}
-                            <span>{language.englishName}</span>
-                        </span>
-                    ))}
-                </div>
-            </section>
-
-            <section className="v2-section" aria-labelledby="v2-features-title">
-                <div className="v2-section-heading">
-                    <span className="v2-section-kicker">A conversation without language barriers</span>
-                    <h2 id="v2-features-title">Stay in the conversation.<br />Not in translation.</h2>
-                    <p>
-                        Vāk handles the language layer in the background so people
-                        can focus on what they are saying.
-                    </p>
-                </div>
-
-                <div className="v2-feature-grid">
-                    <article className="v2-feature-card">
-                        <span className="v2-feature-icon" aria-hidden="true">◎</span>
-                        <h3>Speak naturally</h3>
-                        <p>
-                            Start talking in the language you are comfortable with.
-                            No need to switch how you speak.
-                        </p>
-                    </article>
-                    <article className="v2-feature-card">
-                        <span className="v2-feature-icon" aria-hidden="true">⇄</span>
-                        <h3>Translation follows the speaker</h3>
-                        <p>
-                            Speech is recognized and translated as the conversation
-                            moves from one person to another.
-                        </p>
-                    </article>
-                    <article className="v2-feature-card">
-                        <span className="v2-feature-icon" aria-hidden="true">⌁</span>
-                        <h3>Hear it spoken aloud</h3>
-                        <p>
-                            Translated speech is synthesized as audio, not left as
-                            text for everyone to read.
-                        </p>
-                    </article>
-                </div>
-            </section>
-
-            <section className="v2-section" aria-labelledby="v2-pipeline-title">
-                <div className="v2-section-heading">
-                    <span className="v2-section-kicker">Under the hood</span>
-                    <h2 id="v2-pipeline-title">A voice pipeline, working in sequence.</h2>
-                    <p>
-                        From microphone input to translated audio, each stage has a
-                        clear job in the conversation.
-                    </p>
-                </div>
-
-                <div className="v2-pipeline">
-                    <div className="v2-pipeline-flow">
-                        <div className="v2-pipeline-step">
-                            <span className="v2-pipeline-icon" aria-hidden="true">◉</span>
-                            <strong>Speech capture</strong>
-                            <span>Microphone audio</span>
-                        </div>
-                        <div className="v2-pipeline-step">
-                            <span className="v2-pipeline-icon" aria-hidden="true">≋</span>
-                            <strong>Recognition</strong>
-                            <span>Prisma STT</span>
-                        </div>
-                        <div className="v2-pipeline-step">
-                            <span className="v2-pipeline-icon" aria-hidden="true">⇄</span>
-                            <strong>Translation</strong>
-                            <span>Sarvam</span>
-                        </div>
-                        <div className="v2-pipeline-step">
-                            <span className="v2-pipeline-icon" aria-hidden="true">♫</span>
-                            <strong>Voice synthesis</strong>
-                            <span>Timbre TTS</span>
-                        </div>
-                    </div>
-                    <p className="v2-pipeline-note">
-                        Speech recognition, translation, and voice synthesis power the live experience.
-                    </p>
-                </div>
-            </section>
-
-            <section className="v2-cta-band" aria-labelledby="v2-cta-title">
-                <div>
-                    <h2 id="v2-cta-title">Bring everyone into the same room.</h2>
-                    <p>Create a room, invite your people, and let everyone speak their language.</p>
-                </div>
-                <div className="v2-cta-actions">
-                    <button type="button" className="btn btn-primary" onClick={() => { setView("create"); resetErrors(); }}>
-                        Create a room
-                    </button>
-                    <button type="button" className="btn btn-ghost" onClick={() => { setView("join"); resetErrors(); }}>
-                        Join a room
-                    </button>
-                </div>
-            </section>
-
-            <footer className="landing-footer">
-                <Wordmark size="sm" />
-                <span className="footer-copy">© 2026 Vāk · Speak freely.</span>
-            </footer>
-        </main>
+        <LandingPage
+            onCreateRoom={() => {
+                setView("create");
+                resetErrors();
+            }}
+            onJoinRoom={() => {
+                setView("join");
+                resetErrors();
+            }}
+        />
     );
 }

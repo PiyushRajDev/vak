@@ -13,6 +13,8 @@ export type ParticipantTileInfo = {
 export type CaptionEntry = {
     text: string;
     active: boolean;
+    language?: string;
+    gloss?: string;
 };
 
 type ParticipantTilesProps = {
@@ -145,8 +147,13 @@ export default function ParticipantTiles({
                                 className={`tile-caption ${showCaption ? "tile-caption-visible" : ""}`}
                                 aria-live="polite"
                             >
-                                <p className="tile-caption-text">
+                                <p className="tile-caption-text" lang={caption?.language}>
                                     {caption?.text || ""}
+                                    {caption?.gloss && (
+                                        <span className="tile-caption-gloss" lang="en">
+                                            {caption.gloss}
+                                        </span>
+                                    )}
                                 </p>
                             </div>
 
