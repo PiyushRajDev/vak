@@ -1,8 +1,7 @@
-// UNVERIFIED — illustrative translations for the landing-page demo only.
-// A native speaker must review every string before these are presented as production copy.
-// These strings are not claimed to be verified output from Vāk's translation pipeline.
-
-export const LANDING_SENTENCE_EN = "Are you coming to college tomorrow?";
+// Landing-page example phrases.
+// Hindi source lines are retained from the previous brief.
+// Every non-Hindi line is explicitly UNVERIFIED and requires native-speaker review
+// before production use. These examples are not claimed as provider-verified output.
 
 export const LANDING_TRANSLATIONS = {
     "hi-IN": {
@@ -31,12 +30,6 @@ export const LANDING_TRANSLATIONS = {
     },
 } as const;
 
-export const LANDING_STAGE_LANGUAGES = [
-    "hi-IN",
-    "ta-IN",
-    "kn-IN",
-] as const;
-
 export const LANDING_SECTION_LANGUAGES = [
     "hi-IN",
     "ta-IN",
@@ -44,4 +37,43 @@ export const LANDING_SECTION_LANGUAGES = [
     "te-IN",
     "bn-IN",
     "mr-IN",
+] as const;
+
+export const LANDING_PHRASE_SETS = [
+    {
+        sourceLanguage: "hi-IN",
+        sourceText: LANDING_TRANSLATIONS["hi-IN"].text,
+        sourceReviewStatus: "UNVERIFIED",
+        englishGloss: "Are you coming to college tomorrow?",
+        targets: [
+            {
+                languageCode: "ta-IN",
+                text: LANDING_TRANSLATIONS["ta-IN"].text,
+                reviewStatus: "UNVERIFIED",
+            },
+            {
+                languageCode: "kn-IN",
+                text: LANDING_TRANSLATIONS["kn-IN"].text,
+                reviewStatus: "UNVERIFIED",
+            },
+        ],
+    },
+    {
+        sourceLanguage: "hi-IN",
+        sourceText: "मैं पाँच मिनट में पहुँचता हूँ।",
+        sourceReviewStatus: "UNVERIFIED",
+        englishGloss: "I'll be there in five minutes.",
+        targets: [
+            {
+                languageCode: "ta-IN",
+                text: "நான் ஐந்து நிமிடங்களில் வந்துவிடுகிறேன்.",
+                reviewStatus: "UNVERIFIED",
+            },
+            {
+                languageCode: "kn-IN",
+                text: "ನಾನು ಐದು ನಿಮಿಷಗಳಲ್ಲಿ ಬರುತ್ತೇನೆ.",
+                reviewStatus: "UNVERIFIED",
+            },
+        ],
+    },
 ] as const;

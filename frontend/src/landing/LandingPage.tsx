@@ -102,9 +102,11 @@ export default function LandingPage({
             </nav>
 
             <section className="landing-hero" aria-labelledby="landing-hero-title">
+                <span className="landing-hero-script" aria-hidden="true">क</span>
+
                 <div className="landing-hero-copy">
                     <h1 id="landing-hero-title">
-                        One room.
+                        <span>One room.</span>
                         <span>Every language.</span>
                     </h1>
                     <p className="landing-hero-subline">
@@ -122,31 +124,38 @@ export default function LandingPage({
                         No sign-up. Runs in your browser. Headphones recommended.
                     </p>
                 </div>
+
                 <LandingHeroStage />
             </section>
 
             <section className="landing-idea landing-section-grid" aria-labelledby="landing-idea-title">
-                <div className="landing-idea-copy landing-reveal">
-                    <span className="landing-eyebrow">The idea</span>
+                <header className="landing-idea-heading landing-reveal">
+                    <span className="landing-section-label">01 / THE IDEA</span>
                     <h2 id="landing-idea-title">Nobody has to switch.</h2>
                     <p>
-                        One sentence in Hindi. One listener hears Tamil, another hears Kannada.
-                        Nobody changes how they talk.
+                        One sentence in Hindi. One listener hears Tamil, another hears Kannada. Nobody changes how they talk.
                     </p>
-                </div>
+                </header>
 
                 <div className="landing-script-stack" aria-label="The same sentence in different scripts">
-                    {LANDING_SECTION_LANGUAGES.map(code => {
+                    {LANDING_SECTION_LANGUAGES.map((code, index) => {
                         const language = getLanguage(code);
                         const phrase = LANDING_TRANSLATIONS[code];
 
                         return (
-                            <div className="landing-script-line landing-reveal-item" key={code}>
-                                <span className="landing-script-chip">
-                                    <span lang={code}>{language.nativeName}</span>
-                                    <span>{language.englishName}</span>
+                            <div
+                                className="landing-script-line landing-reveal-item"
+                                key={code}
+                                data-line-index={index}
+                            >
+                                <span className="tile-lang-chip landing-poster-chip">
+                                    <span className="tile-lang-native" lang={code}>{language.nativeName}</span>
+                                    <span className="tile-lang-en">{language.englishName}</span>
                                 </span>
-                                <p lang={code}>{phrase.text}</p>
+                                <p className="landing-script-native" lang={code}>{phrase.text}</p>
+                                <span className="landing-script-gloss" lang="en">
+                                    Are you coming to college tomorrow?
+                                </span>
                             </div>
                         );
                     })}
@@ -154,64 +163,69 @@ export default function LandingPage({
             </section>
 
             <section className="landing-how landing-section" id="how-it-works" aria-labelledby="landing-how-title">
-                <div className="landing-section-heading landing-reveal">
-                    <span className="landing-eyebrow">How it works</span>
+                <header className="landing-section-heading landing-reveal">
+                    <span className="landing-section-label">02 / HOW IT WORKS</span>
                     <h2 id="landing-how-title">Speak. Vāk translates. They hear.</h2>
-                </div>
+                </header>
 
                 <div className="landing-steps-rail">
-                    <article className="landing-step">
+                    <article className="landing-step-row">
+                        <span className="landing-step-number" aria-hidden="true">01</span>
+                        <div className="landing-step-copy">
+                            <h3>Speak</h3>
+                            <p>Talk the way you normally do, in the language you think in.</p>
+                        </div>
                         <span className="landing-step-glyph" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
                                 <rect x="9" y="3" width="6" height="12" rx="3" />
                                 <path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" />
-                                <circle cx="12" cy="9" r="10" strokeOpacity=".24" />
                             </svg>
                         </span>
-                        <span className="landing-step-number">01</span>
-                        <h3>Speak</h3>
-                        <p>Talk the way you normally do, in the language you think in.</p>
                     </article>
 
-                    <article className="landing-step">
+                    <article className="landing-step-row">
+                        <span className="landing-step-number" aria-hidden="true">02</span>
+                        <div className="landing-step-copy">
+                            <h3>Vāk translates</h3>
+                            <p>Your speech is transcribed, translated and voiced in the listener's language.</p>
+                        </div>
                         <span className="landing-step-glyph" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M6 5h12M6 10h12M6 15h8M6 20h12" />
-                                <path d="M3 5h.01M3 10h.01M3 15h.01M3 20h.01" />
+                            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M5 5h14M5 10h14M5 15h9M5 20h14" />
+                                <path d="M2 5h.01M2 10h.01M2 15h.01M2 20h.01" />
                             </svg>
                         </span>
-                        <span className="landing-step-number">02</span>
-                        <h3>Vāk translates</h3>
-                        <p>Your speech is transcribed, translated and voiced in the listener's language.</p>
                     </article>
 
-                    <article className="landing-step">
+                    <article className="landing-step-row">
+                        <span className="landing-step-number" aria-hidden="true">03</span>
+                        <div className="landing-step-copy">
+                            <h3>They hear</h3>
+                            <p>Each person hears you in their own language, with the original text alongside.</p>
+                        </div>
                         <span className="landing-step-glyph" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M4 9v6h4l5 4V5L8 9H4z" />
                                 <path d="M17 9a5 5 0 0 1 0 6M19.5 6.5a9 9 0 0 1 0 11" />
                             </svg>
                         </span>
-                        <span className="landing-step-number">03</span>
-                        <h3>They hear</h3>
-                        <p>Each person hears you in their own language, with the original text alongside.</p>
                     </article>
                 </div>
             </section>
 
             <section className="landing-languages landing-section landing-reveal" id="languages" aria-labelledby="landing-languages-title">
-                <div className="landing-languages-heading">
+                <header className="landing-languages-heading">
                     <div>
-                        <span className="landing-eyebrow">Languages</span>
+                        <span className="landing-section-label">03 / LANGUAGES</span>
                         <h2 id="landing-languages-title">Speak any. Hear any.</h2>
                     </div>
                     <p>{LANGUAGES.filter(language => language.code !== "en-IN").length} Indian languages, live today.</p>
-                </div>
+                </header>
 
                 <div className="landing-language-wall" aria-label="Supported languages">
-                    {LANGUAGES.map(language => (
+                    {LANGUAGES.map((language, index) => (
                         <div
-                            className="landing-language-tile"
+                            className={`landing-language-tile landing-language-size-${index % 3}`}
                             key={language.code}
                             lang={language.code}
                             role="group"
@@ -230,56 +244,52 @@ export default function LandingPage({
                 </div>
             </section>
 
-            <section className="landing-use-cases landing-section" aria-labelledby="landing-use-cases-title">
-                <div className="landing-use-cases-heading landing-reveal">
-                    <h2 id="landing-use-cases-title">Conversations that used to need a translator.</h2>
-                </div>
-                <div className="landing-use-cases-list">
-                    <p className="landing-use-case landing-reveal-item">A family call across states.</p>
-                    <p className="landing-use-case landing-reveal-item">A team spread across the country.</p>
-                    <p className="landing-use-case landing-reveal-item">A classroom where teacher and students think in different languages.</p>
-                </div>
-            </section>
-
-            <section className="landing-under-hood landing-section landing-reveal" id="under-the-hood" aria-labelledby="landing-under-hood-title">
-                <div className="landing-under-hood-heading">
-                    <span className="landing-eyebrow">Under the hood</span>
+            <section className="landing-under-hood landing-section" id="under-the-hood" aria-labelledby="landing-under-hood-title">
+                <header className="landing-under-hood-heading landing-reveal">
+                    <span className="landing-section-label">04 / UNDER THE HOOD</span>
                     <h2 id="landing-under-hood-title">Speech in. Speech out.</h2>
                     <p>
-                        Speech recognition, translation and speech synthesis, running while the conversation happens.
+                        A real voice pipeline, from microphone input to translated playback.
                     </p>
-                </div>
+                </header>
 
-                <div className="landing-pipeline" aria-label="Voice processing pipeline">
-                    <div className="landing-pipeline-step">
-                        <span className="landing-pipeline-label">Your voice</span>
-                        <span className="landing-pipeline-provider">Browser microphone · 16 kHz mono PCM</span>
+                <div className="landing-event-log" aria-label="Example event log">
+                    <div className="landing-event-log-header">
+                        <span>Example event log</span>
+                        <span className="landing-event-log-state">SIMULATED FLOW</span>
                     </div>
-                    <span className="landing-pipeline-arrow" aria-hidden="true">→</span>
-                    <div className="landing-pipeline-step">
-                        <span className="landing-pipeline-label">Transcription</span>
-                        <span className="landing-pipeline-provider">Prisma STT v3.0 · Vachana</span>
-                    </div>
-                    <span className="landing-pipeline-arrow" aria-hidden="true">→</span>
-                    <div className="landing-pipeline-step">
-                        <span className="landing-pipeline-label">Translation</span>
-                        <span className="landing-pipeline-provider">Sarvam Translate v1</span>
-                    </div>
-                    <span className="landing-pipeline-arrow" aria-hidden="true">→</span>
-                    <div className="landing-pipeline-step">
-                        <span className="landing-pipeline-label">Their voice</span>
-                        <span className="landing-pipeline-provider">Timbre TTS v3.0 · Vachana</span>
+                    <div className="landing-event-log-body">
+                        <div className="landing-event-line landing-reveal-item">
+                            <span className="landing-event-tag">STT</span>
+                            <span>speech recognized <em>(hi-IN)</em></span>
+                            <span className="landing-event-provider">prisma-v3.0</span>
+                        </div>
+                        <div className="landing-event-line landing-reveal-item">
+                            <span className="landing-event-tag">TRN</span>
+                            <span>translated <em>(hi → ta)</em></span>
+                            <span className="landing-event-provider">sarvam-translate:v1</span>
+                        </div>
+                        <div className="landing-event-line landing-reveal-item">
+                            <span className="landing-event-tag">TTS</span>
+                            <span>speech synthesized <em>(ta-IN)</em></span>
+                            <span className="landing-event-provider">timbre-v3.0</span>
+                        </div>
+                        <div className="landing-event-line landing-reveal-item">
+                            <span className="landing-event-tag">OUT</span>
+                            <span>playback started</span>
+                            <span className="landing-event-provider">browser audio</span>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            <section className="landing-final-band landing-reveal" aria-labelledby="landing-final-title">
+            <section className="landing-final-band" aria-labelledby="landing-final-title">
                 <h2 id="landing-final-title">Say it in yours.</h2>
                 <div className="landing-final-actions">
-                    <button type="button" className="btn btn-primary" onClick={onCreateRoom}>
+                    <button type="button" className="btn landing-final-primary" onClick={onCreateRoom}>
                         Create a room
                     </button>
-                    <button type="button" className="btn btn-ghost" onClick={onJoinRoom}>
+                    <button type="button" className="btn landing-final-secondary" onClick={onJoinRoom}>
                         Join with a code
                     </button>
                 </div>
