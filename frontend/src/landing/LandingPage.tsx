@@ -10,8 +10,6 @@ type LandingPageProps = {
     onJoinRoom: () => void;
 };
 
-const POSTER_INDENTS = [0, 48, 16, 64, 32, 80];
-
 export default function LandingPage({
     onCreateRoom,
     onJoinRoom,
@@ -149,7 +147,6 @@ export default function LandingPage({
                                 className="landing-script-line landing-reveal-item"
                                 key={code}
                                 data-line-index={index}
-                                style={{ "--poster-indent": `${POSTER_INDENTS[index] ?? 0}px` } as React.CSSProperties}
                             >
                                 <span className="tile-lang-chip landing-poster-chip">
                                     <span className="tile-lang-native" lang={code}>{language.nativeName}</span>
@@ -269,7 +266,7 @@ export default function LandingPage({
                         </div>
                         <div className="landing-event-line landing-reveal-item">
                             <span className="landing-event-tag">TRN</span>
-                            <span>translated <em>(hi-IN → ta-IN)</em></span>
+                            <span>translated <em>(hi → ta)</em></span>
                             <span className="landing-event-provider">sarvam-translate:v1</span>
                         </div>
                         <div className="landing-event-line landing-reveal-item">

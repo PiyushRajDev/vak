@@ -163,9 +163,11 @@ export default function LandingHeroStage() {
                         </span>
                         <div className="landing-caption-copy">
                             <p lang="hi-IN">{sourceCaption}</p>
-                            <span className="landing-caption-gloss" lang="en">
-                                {phrase.englishGloss}
-                            </span>
+                            {sourceWordCount > 0 && (
+                                <span className="landing-caption-gloss" lang="en">
+                                    {phrase.englishGloss}
+                                </span>
+                            )}
                         </div>
                     </div>
 

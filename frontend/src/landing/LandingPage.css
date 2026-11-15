@@ -402,12 +402,12 @@
 .landing-stage[data-stage-phase="hold"] .p-tile:nth-child(2) .tile-avatar-wrap::after,
 .landing-stage[data-stage-phase="hold"] .p-tile:nth-child(3) .tile-avatar-wrap::after {
     opacity: 1;
-    animation: landing-speaking-ring 1s ease-in-out infinite alternate;
+    animation: landing-speaking-ring 1s ease-in-out infinite;
 }
 
 @keyframes landing-speaking-ring {
-    from { opacity: .36; }
-    to { opacity: 1; }
+    0%, 100% { opacity: .36; }
+    50% { opacity: 1; }
 }
 
 .landing-stage .tile-footer {
@@ -566,6 +566,13 @@
 }
 
 /* SECTION 01 — TYPOGRAPHIC POSTER */
+.landing-script-line[data-line-index="1"] { margin-left: 48px; }
+.landing-script-line[data-line-index="2"] { margin-left: 16px; }
+.landing-script-line[data-line-index="3"] { margin-left: 64px; }
+.landing-script-line[data-line-index="4"] { margin-left: 32px; }
+.landing-script-line[data-line-index="5"] { margin-left: 80px; }
+
+
 .landing-idea {
     border-top: 1px solid var(--border-subtle);
 }
@@ -608,7 +615,7 @@
     align-items: baseline;
     gap: 16px;
     min-width: 0;
-    margin-left: var(--poster-indent, 0px);
+    margin-left: 0;
     padding: 10px 0;
     border-bottom: 1px solid var(--border-subtle);
 }
@@ -1094,7 +1101,7 @@
     }
 
     .landing-script-native {
-        font-size: clamp(42px, 8vw, 56px);
+        font-size: 56px;
         line-height: 1.4;
     }
 
@@ -1340,8 +1347,4 @@
         transform: none;
     }
 
-    .landing-language-english {
-        opacity: 1;
-        transform: none;
-    }
 }
