@@ -4,7 +4,7 @@
 
 Vāk is a live voice room where everyone speaks their own language and hears everyone else in theirs. Built for the Gnani Great Indian AI Internship Challenge on Gnani's Prisma (speech recognition) and Timbre (speech synthesis).
 
-[Live demo](LIVE_URL) · [2-3 min demo video](VIDEO_URL) · Source: this repository
+[Live demo](https://vak-amber.vercel.app/) · [Demo video](https://www.loom.com/share/1179e49f73364b8da8fcd3a424133985) · Source: this repository
 
 ## The problem
 
