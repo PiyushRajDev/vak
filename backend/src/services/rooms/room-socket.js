@@ -22,7 +22,7 @@ const PRISMA_ENDPOINT =
     "wss://api.vachana.ai/stt/v3/stream";
 
 const AUTH_TIMEOUT_MS = 10000;
-const MAX_AUDIO_BUFFERED_BYTES = 512 * 1024;
+const MAX_AUDIO_BUFFERED_BYTES = 128 * 1024;
 
 function sendJson(socket, message) {
     if (socket?.readyState === WebSocket.OPEN) {
@@ -89,6 +89,8 @@ export function attachRoomSocket(server) {
         let stoppingStt = false;
         let stopTimer = null;
         const processedUtterances = new Set();
+        let lastAudioNotReadyNoticeAt = 0;
+        let lastAudioBackpressureNoticeAt = 0;
 
         const authTimer = setTimeout(() => {
             sendJson(client, {
@@ -236,7 +238,7 @@ export function attachRoomSocket(server) {
                     "format": "transcribe",
                     "x-sample-rate": "16000",
                     "x-vad-threshold": "0.5",
-                    "x-min-silence-ms": "500",
+                    "x-min-silence-ms": "300",
                     "x-min-speech-ms": "100",
                     "x-min-segment-ms": "120",
                 },
@@ -536,10 +538,14 @@ export function attachRoomSocket(server) {
             if (isBinary) {
                 if (!sttSocket || !sttReady ||
                     sttSocket.readyState !== WebSocket.OPEN) {
-                    sendJson(client, {
-                        type: "audio_not_ready",
-                        message: "Send start_audio and wait for stt_ready first",
-                    });
+                    const now = Date.now();
+                    if (now - lastAudioNotReadyNoticeAt >= 2000) {
+                        lastAudioNotReadyNoticeAt = now;
+                        sendJson(client, {
+                            type: "audio_not_ready",
+                            message: "Speech service is not ready; microphone frames are paused",
+                        });
+                    }
                     return;
                 }
 
@@ -552,10 +558,14 @@ export function attachRoomSocket(server) {
                 }
 
                 if (sttSocket.bufferedAmount > MAX_AUDIO_BUFFERED_BYTES) {
-                    sendJson(client, {
-                        type: "audio_backpressure",
-                        message: "Speech service is receiving audio too slowly",
-                    });
+                    const now = Date.now();
+                    if (now - lastAudioBackpressureNoticeAt >= 2000) {
+                        lastAudioBackpressureNoticeAt = now;
+                        sendJson(client, {
+                            type: "audio_backpressure",
+                            message: "Speech service is receiving audio too slowly",
+                        });
+                    }
                     return;
                 }
 
