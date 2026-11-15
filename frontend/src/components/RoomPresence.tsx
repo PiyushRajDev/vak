@@ -437,13 +437,12 @@ export default function RoomPresence({
             // Reuse the stream granted by the lobby whenever it is still live.
             let stream = micStreamRef.current;
             if (!stream || !stream.active) {
-                const reusableInitialStream =
+                if (
                     initialMicStream?.active &&
                     initialMicStream.getAudioTracks().some(
                         track => track.readyState === "live"
-                    );
-
-                if (reusableInitialStream) {
+                    )
+                ) {
                     stream = initialMicStream;
                 } else if (navigator.mediaDevices?.getUserMedia) {
                     stream = await navigator.mediaDevices.getUserMedia({
@@ -1662,6 +1661,11 @@ export default function RoomPresence({
                     case "audio_backpressure": {
                         console.warn("Room audio backpressure:", message.message);
                         setMicError("Network congestion is delaying microphone audio.");
+                        break;
+                    }
+
+                    case "audio_flow_resumed": {
+                        setMicError(null);
                         break;
                     }
 
