@@ -110,7 +110,7 @@ export default function LandingPage({
                         <span>Every language.</span>
                     </h1>
                     <p className="landing-hero-subline">
-                        One conversation. Everyone hears it in the language they call home.
+                        Real-time conversations across Indian languages.
                     </p>
                     <div className="landing-hero-actions">
                         <button type="button" className="btn btn-primary" onClick={onCreateRoom}>
@@ -133,7 +133,7 @@ export default function LandingPage({
                     <span className="landing-section-label">01 / THE IDEA</span>
                     <h2 id="landing-idea-title">Nobody has to switch.</h2>
                     <p>
-                        One sentence. Six scripts. Everyone stays in the conversation.
+                        One sentence in Hindi. One listener hears Tamil, another hears Kannada. Nobody changes how they talk.
                     </p>
                 </header>
 
