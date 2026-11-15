@@ -1,5 +1,10 @@
 import type { ConversationMessage } from "./ConversationFeed";
 
+export type MicInputDevice = {
+    deviceId: string;
+    label: string;
+};
+
 export type MicDiagnostics = {
     inputLabel: string;
     trackState: string;
@@ -25,6 +30,9 @@ type DiagnosticsDrawerProps = {
     playbackContextState?: string;
     micContextState?: string;
     micDiagnostics: MicDiagnostics;
+    micDevices: MicInputDevice[];
+    selectedMicDeviceId: string;
+    onSelectMicDevice: (deviceId: string) => void;
 };
 
 export default function DiagnosticsDrawer({
@@ -38,6 +46,9 @@ export default function DiagnosticsDrawer({
     playbackContextState = "not-started",
     micContextState = "not-started",
     micDiagnostics,
+    micDevices,
+    selectedMicDeviceId,
+    onSelectMicDevice,
 }: DiagnosticsDrawerProps) {
     if (!isOpen) return null;
 
@@ -105,6 +116,19 @@ export default function DiagnosticsDrawer({
                             </div>
                             <div className="diag-stat">
                                 <span className="stat-label">Microphone Input</span>
+                                <select
+                                    id="mic-input-device"
+                                    className="diag-mic-device-select"
+                                    value={selectedMicDeviceId}
+                                    onChange={event => onSelectMicDevice(event.target.value)}
+                                >
+                                    <option value="">System default microphone</option>
+                                    {micDevices.map(device => (
+                                        <option key={device.deviceId} value={device.deviceId}>
+                                            {device.label}
+                                        </option>
+                                    ))}
+                                </select>
                                 <span className="stat-value">{micDiagnostics.inputLabel}</span>
                             </div>
                             <div className="diag-stat">
