@@ -3212,3 +3212,18 @@ input:focus, select:focus {
         font-size: 11px;
     }
 }
+
+
+/* Device selector inside the diagnostics drawer. */
+.diag-mic-device-select {
+    width: 100%;
+    min-width: 0;
+    margin: 6px 0;
+    padding: 8px 10px;
+    border: 1px solid #3a3d46;
+    border-radius: 8px;
+    background: #17191e;
+    color: #f4f4f5;
+    font: inherit;
+    font-size: 12px;
+}

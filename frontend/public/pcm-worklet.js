@@ -1,28 +1,68 @@
 const TARGET_SAMPLE_RATE = 16000;
 const FRAME_SIZE = 512;
+const METER_EVERY_FRAMES = 16;
+
+function makeLowpass(sampleRate, cutoff, q) {
+    const omega = 2 * Math.PI * cutoff / sampleRate;
+    const cosine = Math.cos(omega);
+    const sine = Math.sin(omega);
+    const alpha = sine / (2 * q);
+    const a0 = 1 + alpha;
+
+    return {
+        b0: ((1 - cosine) / 2) / a0,
+        b1: (1 - cosine) / a0,
+        b2: ((1 - cosine) / 2) / a0,
+        a1: (-2 * cosine) / a0,
+        a2: (1 - alpha) / a0,
+        x1: 0,
+        x2: 0,
+        y1: 0,
+        y2: 0,
+    };
+}
+
+function runLowpass(filter, input) {
+    const output =
+        filter.b0 * input +
+        filter.b1 * filter.x1 +
+        filter.b2 * filter.x2 -
+        filter.a1 * filter.y1 -
+        filter.a2 * filter.y2;
+
+    filter.x2 = filter.x1;
+    filter.x1 = input;
+    filter.y2 = filter.y1;
+    filter.y1 = output;
+
+    return output;
+}
 
 class Pcm16Processor extends AudioWorkletProcessor {
     constructor() {
         super();
 
-        // AudioWorklet's global sampleRate is the actual AudioContext rate.
-        // Resample continuously so the STT provider always receives 16 kHz,
-        // regardless of whether the browser runs at 44.1 or 48 kHz.
         this.sourceRate = sampleRate;
         this.resampleStep = this.sourceRate / TARGET_SAMPLE_RATE;
         this.sourcePosition = 0;
         this.nextOutputPosition = 0;
         this.previousSample = 0;
-        this.filteredSample = 0;
         this.hasPreviousSample = false;
 
-        // A gentle low-pass before downsampling limits high-frequency aliasing.
-        this.lowPassAlpha = 1 - Math.exp(
-            (-2 * Math.PI * 7200) / this.sourceRate
-        );
+        // Two cascaded biquads form a 4th-order Butterworth low-pass.
+        const cutoff = Math.min(7000, this.sourceRate * 0.4);
+        this.filters = [
+            makeLowpass(this.sourceRate, cutoff, 0.5411961),
+            makeLowpass(this.sourceRate, cutoff, 1.306563),
+        ];
 
         this.frame = new Int16Array(FRAME_SIZE);
         this.offset = 0;
+        this.inputChannels = 0;
+        this.framesSinceMeter = 0;
+        this.meterSamples = 0;
+        this.meterEnergy = 0;
+        this.meterPeak = 0;
     }
 
     writeOutputSample(value) {
@@ -36,33 +76,109 @@ class Pcm16Processor extends AudioWorkletProcessor {
             this.frame = new Int16Array(FRAME_SIZE);
             this.offset = 0;
 
-            // Transfer a 1024-byte PCM16 frame (512 samples at 16 kHz).
             this.port.postMessage(packet.buffer, [packet.buffer]);
+
+            this.framesSinceMeter++;
+            if (this.framesSinceMeter >= METER_EVERY_FRAMES) {
+                const rms = this.meterSamples > 0
+                    ? Math.sqrt(this.meterEnergy / this.meterSamples)
+                    : 0;
+
+                this.port.postMessage({
+                    type: "mic_metrics",
+                    inputChannels: this.inputChannels,
+                    sourceSampleRate: this.sourceRate,
+                    rms,
+                    peak: this.meterPeak,
+                });
+
+                this.framesSinceMeter = 0;
+                this.meterSamples = 0;
+                this.meterEnergy = 0;
+                this.meterPeak = 0;
+            }
         }
     }
 
     process(inputs, outputs) {
-        const input = inputs[0]?.[0];
+        const channels = inputs[0] ?? [];
 
-        // Keep the processor running without monitoring the microphone.
         for (const channel of outputs[0] ?? []) {
             channel.fill(0);
         }
 
-        if (!input?.length) {
+        if (!channels.length || !channels[0]?.length) {
             return true;
         }
 
-        for (let i = 0; i < input.length; i++) {
-            const sample = input[i];
+        const frameLength = channels[0].length;
+        this.inputChannels = channels.length;
 
-            this.filteredSample +=
-                this.lowPassAlpha * (sample - this.filteredSample);
+        // Downmix all channels. If opposing channels nearly cancel, use the
+        // strongest channel to avoid sending silence for unusual device wiring.
+        let maxChannel = channels[0];
+        let maxChannelEnergy = -1;
+        let averageEnergy = 0;
+
+        for (const channel of channels) {
+            let energy = 0;
+            for (let i = 0; i < frameLength; i++) {
+                energy += channel[i] * channel[i];
+            }
+            energy /= frameLength;
+            averageEnergy += energy;
+
+            if (energy > maxChannelEnergy) {
+                maxChannelEnergy = energy;
+                maxChannel = channel;
+            }
+        }
+
+        averageEnergy /= channels.length;
+
+        let downmixEnergy = 0;
+        for (let i = 0; i < frameLength; i++) {
+            let value = 0;
+            for (const channel of channels) {
+                value += channel[i];
+            }
+            value /= channels.length;
+            downmixEnergy += value * value;
+        }
+        downmixEnergy /= frameLength;
+
+        const useStrongestChannel =
+            channels.length > 1 &&
+            downmixEnergy < averageEnergy * 0.0625;
+
+        for (let i = 0; i < frameLength; i++) {
+            let inputSample;
+
+            if (channels.length === 1) {
+                inputSample = channels[0][i];
+            } else if (useStrongestChannel) {
+                inputSample = maxChannel[i];
+            } else {
+                inputSample = 0;
+                for (const channel of channels) {
+                    inputSample += channel[i];
+                }
+                inputSample /= channels.length;
+            }
+
+            this.meterSamples++;
+            this.meterEnergy += inputSample * inputSample;
+            this.meterPeak = Math.max(this.meterPeak, Math.abs(inputSample));
+
+            let filteredSample = inputSample;
+            for (const filter of this.filters) {
+                filteredSample = runLowpass(filter, filteredSample);
+            }
 
             if (!this.hasPreviousSample) {
-                this.previousSample = this.filteredSample;
+                this.previousSample = filteredSample;
                 this.hasPreviousSample = true;
-                this.writeOutputSample(this.filteredSample);
+                this.writeOutputSample(filteredSample);
                 this.nextOutputPosition = this.resampleStep;
                 this.sourcePosition = 1;
                 continue;
@@ -81,13 +197,13 @@ class Pcm16Processor extends AudioWorkletProcessor {
 
                 const outputSample =
                     this.previousSample +
-                    (this.filteredSample - this.previousSample) * fraction;
+                    (filteredSample - this.previousSample) * fraction;
 
                 this.writeOutputSample(outputSample);
                 this.nextOutputPosition += this.resampleStep;
             }
 
-            this.previousSample = this.filteredSample;
+            this.previousSample = filteredSample;
             this.sourcePosition += 1;
         }
 
